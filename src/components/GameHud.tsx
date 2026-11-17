@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 interface GameHudProps {
   score: number;
   scoreRef?: RefObject<HTMLSpanElement | null>;
+  multiplier: number;
   wave: number;
   lives: number;
   maxLives: number;
@@ -49,6 +50,7 @@ function HeartIcon({ filled }: { filled: boolean }) {
 export function GameHud({
   score,
   scoreRef,
+  multiplier,
   wave,
   lives,
   maxLives,
@@ -61,19 +63,31 @@ export function GameHud({
       className="pointer-events-none absolute inset-x-0 top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-start px-3 pt-2.5 sm:px-6 sm:pt-4"
       aria-label="Game HUD"
     >
-      {/* Left: Score */}
+      {/* Left: Score + Combo Multiplier */}
       <div className="flex flex-col items-start justify-self-start">
         <span className="text-[10px] font-semibold tracking-[0.18em] text-[#8ba1bd] uppercase sm:text-[11px]">
           Score
         </span>
-        <span
-          ref={scoreRef}
-          data-testid="hud-score"
-          className="font-mono-num text-xl leading-none font-bold text-[#e8fbff] sm:text-3xl"
-          style={{ textShadow: '0 0 12px rgba(0, 245, 255, 0.45)' }}
-        >
-          {score.toLocaleString()}
-        </span>
+        <div className="flex items-baseline gap-2">
+          <span
+            ref={scoreRef}
+            data-testid="hud-score"
+            className="font-mono-num text-xl leading-none font-bold text-[#e8fbff] sm:text-3xl"
+            style={{ textShadow: '0 0 12px rgba(0, 245, 255, 0.45)' }}
+          >
+            {score.toLocaleString()}
+          </span>
+          {multiplier > 1 && (
+            <span
+              key={multiplier}
+              data-testid="hud-multiplier"
+              className="font-mono-num animate-combo-pulse text-sm leading-none font-bold text-[#ff70b8] sm:text-lg"
+              style={{ textShadow: '0 0 12px rgba(255, 30, 138, 0.65)' }}
+            >
+              ×{multiplier}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Center: Wave */}

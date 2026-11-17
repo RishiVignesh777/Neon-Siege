@@ -99,6 +99,7 @@ export interface GameSnapshot {
   bestScore: number;
   wave: number;
   lives: number;
+  multiplier: number;
   elapsedSeconds: number;
   kills: number;
   isNewBest: boolean;
@@ -122,6 +123,8 @@ export interface SimulationState {
   score: number;
   bestScore: number;
   isNewBest: boolean;
+  multiplier: number;
+  comboTimer: number;
   wave: number;
   waveBannerTimer: number;
   elapsedSeconds: number;

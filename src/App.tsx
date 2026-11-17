@@ -55,6 +55,7 @@ export default function App() {
         prev.phase === sim.phase &&
         prev.wave === sim.wave &&
         prev.lives === sim.lives &&
+        prev.multiplier === sim.multiplier &&
         prev.isNewBest === sim.isNewBest &&
         (sim.phase === 'playing' || prev.score === sim.score)
       ) {
@@ -276,6 +277,7 @@ export default function App() {
           <GameHud
             score={snapshot.score}
             scoreRef={scoreElRef}
+            multiplier={snapshot.multiplier}
             wave={snapshot.wave}
             lives={snapshot.lives}
             maxLives={MAX_LIVES}

@@ -231,3 +231,54 @@ test('difficulty ramps continuously and wave increments every 15 seconds', () =>
   assert.ok(d30.enemyBulletSpeed > d0.enemyBulletSpeed);
   assert.ok(d90.enemyBulletSpeed > d30.enemyBulletSpeed);
 });
+
+test('combo multiplier increments on kills within 1.5s, caps at x10, multiplies kill points, and resets after 1.5s', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  assert.equal(sim.multiplier, 1);
+
+  const spawnHitPair = (idBase: number) => {
+    const enemy = spawnEnemy(sim, () => 0.5);
+    enemy.x = 450;
+    enemy.y = 320;
+    sim.playerBullets.push({
+      id: idBase,
+      x: 450,
+      y: 325,
+      vx: 0,
+      vy: -800,
+      radius: 4,
+      active: true,
+    });
+  };
+
+  // Kill 1 -> stays x1, awards 100 * 1 * 1 = 100
+  spawnHitPair(2001);
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.multiplier, 1);
+  assert.equal(sim.killScore, 100);
+
+  // Advance 0.5s (< 1.5s), then Kill 2 -> x2, awards 100 * 1 * 2 = 200 (total 300)
+  for (let i = 0; i < 10; i++) {
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  spawnHitPair(2002);
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.multiplier, 2);
+  assert.equal(sim.killScore, 300);
+
+  // Chain 10 more rapid kills -> caps at x10
+  for (let k = 0; k < 10; k++) {
+    sim.hitstopTimer = 0;
+    spawnHitPair(2010 + k);
+    stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  }
+  assert.equal(sim.multiplier, 10);
+
+  // Wait > 1.5s without a kill -> resets back to x1
+  sim.hitstopTimer = 0;
+  for (let i = 0; i < 32; i++) {
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  assert.equal(sim.multiplier, 1);
+  assert.equal(sim.comboTimer, 0);
+});

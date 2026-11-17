@@ -22,6 +22,8 @@ export const ENEMY_TELEGRAPH_SECONDS = 0.28;
 export const WAVE_DURATION_SECONDS = 15;
 export const TIME_BONUS_POINTS_PER_SECOND = 10;
 export const KILL_BASE_POINTS = 100;
+export const COMBO_WINDOW_SECONDS = 1.5;
+export const MAX_COMBO_MULTIPLIER = 10;
 
 export const MAX_PARTICLES = 240;
 export const MAX_DELTA_TIME = 0.05;

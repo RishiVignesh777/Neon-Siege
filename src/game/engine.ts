@@ -3,6 +3,7 @@ import {
   ARENA_WIDTH,
   BEST_SCORE_STORAGE_KEY,
   COLORS,
+  COMBO_WINDOW_SECONDS,
   DEATH_BEAT_SECONDS,
   ENEMY_BULLET_RADIUS,
   ENEMY_RADIUS,
@@ -12,6 +13,7 @@ import {
   INVULNERABILITY_SECONDS,
   KILL_BASE_POINTS,
   LOWER_ZONE_TOP_RATIO,
+  MAX_COMBO_MULTIPLIER,
   MAX_DELTA_TIME,
   MAX_LIVES,
   MAX_PARTICLES,
@@ -95,8 +97,8 @@ export function getDifficultyParams(elapsedSeconds: number): DifficultyParams {
   };
 }
 
-export function getKillPoints(wave: number): number {
-  return KILL_BASE_POINTS * Math.max(1, wave);
+export function getKillPoints(wave: number, multiplier = 1): number {
+  return KILL_BASE_POINTS * Math.max(1, wave) * Math.max(1, multiplier);
 }
 
 export function getLowerZoneMinY(height = ARENA_HEIGHT, radius = PLAYER_RADIUS): number {
@@ -154,6 +156,8 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     score: 0,
     bestScore: Math.max(0, Math.floor(bestScore)),
     isNewBest: false,
+    multiplier: 1,
+    comboTimer: 0,
     wave: 1,
     waveBannerTimer: 0,
     elapsedSeconds: 0,
@@ -346,8 +350,15 @@ export function stepSimulation(
     return;
   }
 
-  // Advance survival clock, wave, and time bonus
+  // Advance survival clock, combo decay, wave, and time bonus
   sim.elapsedSeconds += dt;
+  if (sim.comboTimer > 0) {
+    sim.comboTimer -= dt;
+    if (sim.comboTimer <= 0) {
+      sim.comboTimer = 0;
+      sim.multiplier = 1;
+    }
+  }
   const nextWave = getWaveFromTime(sim.elapsedSeconds);
   if (nextWave > sim.wave) {
     sim.wave = nextWave;
@@ -521,7 +532,13 @@ export function stepSimulation(
         b.active = false;
         e.active = false;
         sim.kills += 1;
-        sim.killScore += getKillPoints(sim.wave);
+        if (sim.comboTimer > 0) {
+          sim.multiplier = Math.min(MAX_COMBO_MULTIPLIER, sim.multiplier + 1);
+        } else {
+          sim.multiplier = 1;
+        }
+        sim.comboTimer = COMBO_WINDOW_SECONDS;
+        sim.killScore += getKillPoints(sim.wave, sim.multiplier);
         sim.score = Math.floor(sim.killScore + sim.timeScore);
         if (sim.score > sim.bestScore) {
           sim.bestScore = sim.score;
@@ -609,6 +626,7 @@ export function getSnapshot(sim: SimulationState): GameSnapshot {
     bestScore: sim.bestScore,
     wave: sim.wave,
     lives: sim.lives,
+    multiplier: sim.multiplier,
     elapsedSeconds: sim.elapsedSeconds,
     kills: sim.kills,
     isNewBest: sim.isNewBest,
