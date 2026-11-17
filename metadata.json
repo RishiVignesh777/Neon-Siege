@@ -1,0 +1,6 @@
+{
+  "name": "NEON SIEGE",
+  "description": "A neon cyberpunk 2D arcade survival shooter with endless waves, glowing vector graphics, and local high-score tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

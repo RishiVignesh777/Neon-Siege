@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Chakra Petch', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #05060b;
+    color: #e6f7ff;
+    font-family: var(--font-display);
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes promptPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateY(-1px);
+  }
+}
+
+.animate-prompt-pulse {
+  animation: promptPulse 1.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-prompt-pulse {
+    animation: none;
+  }
+}
