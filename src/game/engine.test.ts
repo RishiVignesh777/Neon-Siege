@@ -32,6 +32,7 @@ import {
   getDifficultyParams,
   getKillPoints,
   getLowerZoneMinY,
+  getSnapshot,
   getWaveFromTime,
   spawnBoss,
   spawnEnemy,
@@ -592,4 +593,74 @@ test('power-ups: shield absorbs next hit, rapid fire halves cooldown for 10s, sp
   stepSimulation(sim, emptyInput({ fireHeld: true, fireJustPressed: true }), 0.016, () => 0.5);
   assert.equal(sim.playerBullets.length, 1);
 });
+
+test('power-up HUD snapshot exposes activePowerUp and timed countdowns accurately', () => {
+  const sim = createInitialSimulation(0, 'playing');
+
+  let snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, null);
+  assert.equal(snap.powerUpSeconds, null);
+
+  // Shield: activePowerUp === 'shield', powerUpSeconds === null (no timer), clears immediately on hit
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'shield');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, 'shield');
+  assert.equal(snap.powerUpSeconds, null);
+
+  sim.enemyBullets.push({
+    id: 7001,
+    x: sim.player.x,
+    y: sim.player.y,
+    vx: 0,
+    vy: 150,
+    radius: 4.5,
+    grazed: false,
+    inGrazeRing: false,
+    grazeX: sim.player.x,
+    grazeY: sim.player.y,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, null);
+  assert.equal(snap.powerUpSeconds, null);
+
+  // Rapid fire: shows 10s countdown, ticks down, clears immediately when timer hits 0
+  sim.hitstopTimer = 0;
+  sim.player.invulnTimer = 0;
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'rapid_fire');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, 'rapid_fire');
+  assert.equal(snap.powerUpSeconds, 10);
+
+  // Advance 5.5s -> remaining ~4.5s -> ceil = 5s
+  for (let i = 0; i < 110; i++) {
+    sim.player.invulnTimer = 1.0;
+    sim.hitstopTimer = 0;
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, 'rapid_fire');
+  assert.equal(snap.powerUpSeconds, 5);
+
+  // Advance remaining ~4.6s -> expires and clears immediately
+  for (let i = 0; i < 95; i++) {
+    sim.player.invulnTimer = 1.0;
+    sim.hitstopTimer = 0;
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, null);
+  assert.equal(snap.powerUpSeconds, null);
+
+  // Spread shot: shows 10s countdown and clears when expired
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'spread_shot');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  snap = getSnapshot(sim);
+  assert.equal(snap.activePowerUp, 'spread_shot');
+  assert.equal(snap.powerUpSeconds, 10);
+});
+
 

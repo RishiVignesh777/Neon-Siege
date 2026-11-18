@@ -149,6 +149,8 @@ export interface GameSnapshot {
   multiplier: number;
   bossHp: number | null;
   bossMaxHp: number | null;
+  activePowerUp: PowerUpType | null;
+  powerUpSeconds: number | null;
   elapsedSeconds: number;
   kills: number;
   isNewBest: boolean;

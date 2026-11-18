@@ -982,6 +982,13 @@ export function stepSimulation(
   }
 }
 
+export function getPowerUpRemainingSeconds(sim: SimulationState): number | null {
+  if (sim.activePowerUp === 'rapid_fire' || sim.activePowerUp === 'spread_shot') {
+    return sim.powerUpTimer > 0 ? Math.max(1, Math.ceil(sim.powerUpTimer)) : null;
+  }
+  return null;
+}
+
 export function getSnapshot(sim: SimulationState): GameSnapshot {
   return {
     phase: sim.phase,
@@ -992,6 +999,8 @@ export function getSnapshot(sim: SimulationState): GameSnapshot {
     multiplier: sim.multiplier,
     bossHp: sim.boss ? sim.boss.hp : null,
     bossMaxHp: sim.boss ? sim.boss.maxHp : null,
+    activePowerUp: sim.activePowerUp,
+    powerUpSeconds: getPowerUpRemainingSeconds(sim),
     elapsedSeconds: sim.elapsedSeconds,
     kills: sim.kills,
     isNewBest: sim.isNewBest,

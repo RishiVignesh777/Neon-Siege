@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import type { PowerUpType } from '../game/types';
 
 interface GameHudProps {
   score: number;
@@ -7,6 +8,8 @@ interface GameHudProps {
   wave: number;
   bossHp: number | null;
   bossMaxHp: number | null;
+  activePowerUp: PowerUpType | null;
+  powerUpSeconds: number | null;
   lives: number;
   maxLives: number;
   muted: boolean;
@@ -49,6 +52,105 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
+function PowerUpIcon({ type }: { type: PowerUpType }) {
+  if (type === 'shield') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5 shrink-0 sm:h-6 sm:w-6"
+        aria-hidden="true"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="9.5"
+          fill="none"
+          stroke="rgba(0, 245, 255, 0.3)"
+          strokeWidth="3.8"
+        />
+        <circle
+          cx="12"
+          cy="12"
+          r="9.5"
+          fill="#07222e"
+          stroke="#00f5ff"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M12 6.5L16.6 8.6L15.9 13.8L12 17.8L8.1 13.8L7.4 8.6Z"
+          fill="#67f9ff"
+          stroke="#f4fbff"
+          strokeWidth="1.1"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  if (type === 'rapid_fire') {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5 shrink-0 sm:h-6 sm:w-6"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 2L22 12L12 22L2 12Z"
+          fill="none"
+          stroke="rgba(251, 191, 36, 0.32)"
+          strokeWidth="3.8"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12 2L22 12L12 22L2 12Z"
+          fill="#2a1805"
+          stroke="#fbbf24"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M8.5 11.2L12 7.7L15.5 11.2M8.5 15.4L12 11.9L15.5 15.4"
+          fill="none"
+          stroke="#fef3c7"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0 sm:h-6 sm:w-6"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2L20.66 7V17L12 22L3.34 17V7Z"
+        fill="none"
+        stroke="rgba(52, 211, 153, 0.32)"
+        strokeWidth="3.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 2L20.66 7V17L12 22L3.34 17V7Z"
+        fill="#06281c"
+        stroke="#34d399"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 16.5V7.2M12 16.5L7.8 8.8M12 16.5L16.2 8.8"
+        fill="none"
+        stroke="#d1fae5"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function GameHud({
   score,
   scoreRef,
@@ -56,6 +158,8 @@ export function GameHud({
   wave,
   bossHp,
   bossMaxHp,
+  activePowerUp,
+  powerUpSeconds,
   lives,
   maxLives,
   muted,
@@ -64,6 +168,14 @@ export function GameHud({
 }: GameHudProps) {
   const showBossBar = bossHp !== null && bossMaxHp !== null && bossMaxHp > 0;
   const bossPct = showBossBar ? Math.max(0, Math.min(100, (bossHp / bossMaxHp) * 100)) : 0;
+  const powerUpLabel =
+    activePowerUp === 'shield'
+      ? 'Active power-up: Shield'
+      : activePowerUp === 'rapid_fire'
+        ? `Active power-up: Rapid Fire, ${powerUpSeconds ?? 0} seconds remaining`
+        : activePowerUp === 'spread_shot'
+          ? `Active power-up: Spread Shot, ${powerUpSeconds ?? 0} seconds remaining`
+          : undefined;
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-start px-3 pt-2.5 sm:px-6 sm:pt-4"
@@ -132,61 +244,89 @@ export function GameHud({
         )}
       </div>
 
-      {/* Right: Lives (Hearts) + compact Mute/Pause */}
-      <div className="flex items-center gap-2 justify-self-end sm:gap-4">
-        <div
-          className="flex items-center gap-1 sm:gap-1.5"
-          data-testid="hud-lives"
-          aria-label={`Lives remaining: ${lives} of ${maxLives}`}
-        >
-          {Array.from({ length: maxLives }, (_, idx) => (
-            <HeartIcon key={idx} filled={idx < lives} />
-          ))}
+      {/* Right: Lives (Hearts) + compact Mute/Pause + Active Power-up indicator */}
+      <div className="flex flex-col items-end gap-1.5 justify-self-end">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div
+            className="flex items-center gap-1 sm:gap-1.5"
+            data-testid="hud-lives"
+            aria-label={`Lives remaining: ${lives} of ${maxLives}`}
+          >
+            {Array.from({ length: maxLives }, (_, idx) => (
+              <HeartIcon key={idx} filled={idx < lives} />
+            ))}
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5">
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleMute();
+              }}
+              aria-label={muted ? 'Unmute audio' : 'Mute audio'}
+              title={muted ? 'Unmute [M]' : 'Mute [M]'}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-[#8b5cf6]/35 bg-[#0a0d1a]/80 text-[#b6c8e0] transition-colors hover:border-[#00f5ff]/70 hover:text-[#00f5ff] sm:h-8 sm:w-8"
+            >
+              {muted ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinejoin="round" />
+                  <path d="M22 9l-6 6M16 9l6 6" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinejoin="round" />
+                  <path d="M15.5 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
+                  <path d="M18.5 5.5a9 9 0 0 1 0 13" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onTogglePause();
+              }}
+              aria-label="Pause game"
+              title="Pause [P]"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-[#8b5cf6]/35 bg-[#0a0d1a]/80 text-[#b6c8e0] transition-colors hover:border-[#00f5ff]/70 hover:text-[#00f5ff] sm:h-8 sm:w-8"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5">
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onToggleMute();
-            }}
-            aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-            title={muted ? 'Unmute [M]' : 'Mute [M]'}
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-[#8b5cf6]/35 bg-[#0a0d1a]/80 text-[#b6c8e0] transition-colors hover:border-[#00f5ff]/70 hover:text-[#00f5ff] sm:h-8 sm:w-8"
+        {activePowerUp && (
+          <div
+            data-testid="hud-powerup"
+            data-powerup={activePowerUp}
+            aria-label={powerUpLabel}
+            className="flex items-center gap-1.5"
           >
-            {muted ? (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinejoin="round" />
-                <path d="M22 9l-6 6M16 9l6 6" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinejoin="round" />
-                <path d="M15.5 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
-                <path d="M18.5 5.5a9 9 0 0 1 0 13" strokeLinecap="round" />
-              </svg>
+            <PowerUpIcon type={activePowerUp} />
+            {powerUpSeconds !== null && (
+              <span
+                data-testid="hud-powerup-timer"
+                className="font-mono-num text-sm leading-none font-bold sm:text-base"
+                style={{
+                  color: activePowerUp === 'rapid_fire' ? '#fbbf24' : '#34d399',
+                  textShadow:
+                    activePowerUp === 'rapid_fire'
+                      ? '0 0 12px rgba(251, 191, 36, 0.55)'
+                      : '0 0 12px rgba(52, 211, 153, 0.55)',
+                }}
+              >
+                {powerUpSeconds}s
+              </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onTogglePause();
-            }}
-            aria-label="Pause game"
-            title="Pause [P]"
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-[#8b5cf6]/35 bg-[#0a0d1a]/80 text-[#b6c8e0] transition-colors hover:border-[#00f5ff]/70 hover:text-[#00f5ff] sm:h-8 sm:w-8"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-              <rect x="6" y="5" width="4" height="14" rx="1" />
-              <rect x="14" y="5" width="4" height="14" rx="1" />
-            </svg>
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

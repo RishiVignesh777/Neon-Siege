@@ -12,6 +12,7 @@ import {
 } from './game/constants';
 import {
   createInitialSimulation,
+  getPowerUpRemainingSeconds,
   getSnapshot,
   loadBestScore,
   spawnBoss,
@@ -73,6 +74,7 @@ export default function App() {
     setSnapshot((prev) => {
       const simBossHp = sim.boss ? sim.boss.hp : null;
       const simBossMaxHp = sim.boss ? sim.boss.maxHp : null;
+      const simPowerUpSeconds = getPowerUpRemainingSeconds(sim);
       if (
         !force &&
         prev.phase === sim.phase &&
@@ -81,6 +83,8 @@ export default function App() {
         prev.multiplier === sim.multiplier &&
         prev.bossHp === simBossHp &&
         prev.bossMaxHp === simBossMaxHp &&
+        prev.activePowerUp === sim.activePowerUp &&
+        prev.powerUpSeconds === simPowerUpSeconds &&
         prev.isNewBest === sim.isNewBest &&
         (sim.phase === 'playing' || prev.score === sim.score)
       ) {
@@ -306,6 +310,8 @@ export default function App() {
             wave={snapshot.wave}
             bossHp={snapshot.bossHp}
             bossMaxHp={snapshot.bossMaxHp}
+            activePowerUp={snapshot.activePowerUp}
+            powerUpSeconds={snapshot.powerUpSeconds}
             lives={snapshot.lives}
             maxLives={MAX_LIVES}
             muted={muted}
