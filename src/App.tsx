@@ -3,11 +3,18 @@ import { GameHud } from './components/GameHud';
 import { GameOverModal, PauseModal } from './components/Modals';
 import { TitleOverlay } from './components/TitleOverlay';
 import { NeonAudio } from './game/audio';
-import { ARENA_HEIGHT, ARENA_WIDTH, MAX_LIVES } from './game/constants';
+import {
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  BOSS_WAVE_INTERVAL,
+  MAX_LIVES,
+  WAVE_DURATION_SECONDS,
+} from './game/constants';
 import {
   createInitialSimulation,
   getSnapshot,
   loadBestScore,
+  spawnBoss,
   stepSimulation,
 } from './game/engine';
 import { renderSimulation } from './game/renderer';
@@ -16,6 +23,22 @@ import type { GameSnapshot, InputState, SimulationState } from './game/types';
 function shouldAutostart(): boolean {
   if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).get('autostart') === '1';
+}
+
+function createAutostartSimulation(bestScore: number, autostart: boolean): SimulationState {
+  const sim = createInitialSimulation(bestScore, autostart ? 'playing' : 'title');
+  if (!autostart || typeof window === 'undefined') return sim;
+  const rawWave = new URLSearchParams(window.location.search).get('wave');
+  const parsedWave = rawWave ? Number.parseInt(rawWave, 10) : 1;
+  if (Number.isFinite(parsedWave) && parsedWave > 1) {
+    sim.wave = parsedWave;
+    sim.waveProgressSeconds = (parsedWave - 1) * WAVE_DURATION_SECONDS;
+    sim.elapsedSeconds = (parsedWave - 1) * WAVE_DURATION_SECONDS;
+    if (parsedWave % BOSS_WAVE_INTERVAL === 0) {
+      spawnBoss(sim);
+    }
+  }
+  return sim;
 }
 
 export default function App() {
@@ -27,9 +50,7 @@ export default function App() {
   const initialBest = loadBestScore();
   const autostart = shouldAutostart();
 
-  const simRef = useRef<SimulationState>(
-    createInitialSimulation(initialBest, autostart ? 'playing' : 'title')
-  );
+  const simRef = useRef<SimulationState>(createAutostartSimulation(initialBest, autostart));
   const audioRef = useRef<NeonAudio>(new NeonAudio());
   const keysHeldRef = useRef<Set<string>>(new Set());
   const fireJustPressedRef = useRef<boolean>(false);
@@ -50,12 +71,16 @@ export default function App() {
     }
 
     setSnapshot((prev) => {
+      const simBossHp = sim.boss ? sim.boss.hp : null;
+      const simBossMaxHp = sim.boss ? sim.boss.maxHp : null;
       if (
         !force &&
         prev.phase === sim.phase &&
         prev.wave === sim.wave &&
         prev.lives === sim.lives &&
         prev.multiplier === sim.multiplier &&
+        prev.bossHp === simBossHp &&
+        prev.bossMaxHp === simBossMaxHp &&
         prev.isNewBest === sim.isNewBest &&
         (sim.phase === 'playing' || prev.score === sim.score)
       ) {
@@ -279,6 +304,8 @@ export default function App() {
             scoreRef={scoreElRef}
             multiplier={snapshot.multiplier}
             wave={snapshot.wave}
+            bossHp={snapshot.bossHp}
+            bossMaxHp={snapshot.bossMaxHp}
             lives={snapshot.lives}
             maxLives={MAX_LIVES}
             muted={muted}

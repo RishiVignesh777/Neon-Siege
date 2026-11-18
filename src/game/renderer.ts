@@ -7,7 +7,7 @@ import {
   MAX_GRAZE_POPUPS,
   MAX_PARTICLES,
 } from './constants';
-import type { Enemy, SimulationState } from './types';
+import type { Boss, Enemy, SimulationState } from './types';
 
 interface BgMote {
   x: number;
@@ -366,6 +366,68 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy): void {
   ctx.restore();
 }
 
+function traceHexagonPath(ctx: CanvasRenderingContext2D, radius: number): void {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 3) * i - Math.PI / 2;
+    const vx = Math.cos(angle) * radius;
+    const vy = Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(vx, vy);
+    else ctx.lineTo(vx, vy);
+  }
+  ctx.closePath();
+}
+
+function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss): void {
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+
+  const r = boss.radius;
+  const hitFlash = boss.hitFlashTimer > 0;
+
+  // Soft violet ambient aura (no shadowBlur)
+  ctx.fillStyle = hitFlash ? 'rgba(216, 180, 254, 0.28)' : 'rgba(139, 92, 246, 0.2)';
+  ctx.beginPath();
+  ctx.arc(0, 0, r + 16, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer violet hexagon body
+  traceHexagonPath(ctx, r);
+  ctx.fillStyle = hitFlash ? '#4c1d95' : '#1b0d38';
+  ctx.fill();
+
+  // Multi-pass brighter violet glow outline
+  ctx.strokeStyle = hitFlash ? 'rgba(244, 251, 255, 0.45)' : 'rgba(168, 85, 247, 0.36)';
+  ctx.lineWidth = 10;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  ctx.strokeStyle = hitFlash ? COLORS.white : '#c084fc';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.strokeStyle = hitFlash ? COLORS.white : '#e9d5ff';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Inner rotating hexagon core
+  ctx.save();
+  ctx.rotate(boss.spinAngle);
+  traceHexagonPath(ctx, r * 0.54);
+  ctx.strokeStyle = hitFlash ? COLORS.white : COLORS.violet;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.restore();
+
+  // Central bright core
+  ctx.fillStyle = hitFlash ? COLORS.white : '#e9d5ff';
+  ctx.beginPath();
+  ctx.arc(0, 0, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function drawBullets(ctx: CanvasRenderingContext2D, sim: SimulationState): void {
   // Player bullets (cyan vertical laser bolts)
   for (let i = 0; i < sim.playerBullets.length; i++) {
@@ -496,6 +558,9 @@ export function renderSimulation(
     for (let i = 0; i < sim.enemies.length; i++) {
       const e = sim.enemies[i];
       if (e.active) drawEnemy(ctx, e);
+    }
+    if (sim.boss && sim.boss.active) {
+      drawBoss(ctx, sim.boss);
     }
     drawPlayer(ctx, sim, timeSec);
     drawParticles(ctx, sim);

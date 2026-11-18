@@ -3,7 +3,10 @@ import test from 'node:test';
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
+  BOSS_MAX_HP,
+  BOSS_RADIUS,
   DEATH_BEAT_SECONDS,
+  ENEMY_RADIUS,
   ENEMY_TELEGRAPH_SECONDS,
   FIRE_COOLDOWN_SECONDS,
   GRAZE_BONUS_POINTS,
@@ -13,6 +16,7 @@ import {
   PLAYER_HIT_RADIUS,
   PLAYER_RADIUS,
   PLAYER_SPEED,
+  WAVE_DURATION_SECONDS,
 } from './constants';
 import {
   clampPlayerPosition,
@@ -328,3 +332,79 @@ test('graze ring (26px vs 14px hit radius) awards +2 once on near miss and never
   assert.equal(sim.lives, 2);
   assert.equal(sim.grazeScore, GRAZE_BONUS_POINTS);
 });
+
+test('wave 5 spawns a 20-HP boss, pauses normal enemy spawning, patrols upper third, and resumes wave 6 on defeat', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  // Position right before wave 5 transition (4 * 15s = 60s)
+  sim.elapsedSeconds = WAVE_DURATION_SECONDS * 4 - 0.02;
+  sim.waveProgressSeconds = WAVE_DURATION_SECONDS * 4 - 0.02;
+  sim.wave = 4;
+  sim.spawnTimer = 0.01;
+
+  // Step across wave 5 threshold -> boss spawns and normal spawning pauses
+  stepSimulation(sim, emptyInput(), 0.04, () => 0.5);
+  assert.equal(sim.wave, 5);
+  assert.ok(sim.boss !== null);
+  assert.equal(sim.boss.hp, BOSS_MAX_HP);
+  assert.equal(sim.boss.maxHp, 20);
+  assert.equal(sim.boss.radius, ENEMY_RADIUS * 2);
+  assert.equal(sim.boss.radius, BOSS_RADIUS);
+  assert.equal(sim.enemies.length, 0);
+
+  // Patrol across several seconds -> stays in upper third, moves side to side, never spawns enemies or bullets
+  const initialX = sim.boss.x;
+  let minX = initialX;
+  let maxX = initialX;
+  for (let i = 0; i < 160; i++) {
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+    assert.ok(sim.boss !== null);
+    assert.ok(sim.boss.y <= ARENA_HEIGHT / 3, `boss y=${sim.boss.y} should stay in upper third`);
+    assert.equal(sim.enemies.length, 0, 'normal enemy spawning must stay paused during boss');
+    assert.equal(sim.enemyBullets.length, 0, 'boss must not fire yet');
+    minX = Math.min(minX, sim.boss.x);
+    maxX = Math.max(maxX, sim.boss.x);
+  }
+  assert.ok(maxX - minX > 200, 'boss should drift side to side across the upper third');
+  assert.equal(sim.wave, 5, 'wave should stay at 5 while boss is alive');
+
+  // Hit boss 19 times -> each bullet removes 1 HP and boss stays alive at 1 HP
+  for (let hit = 1; hit <= 19; hit++) {
+    sim.hitstopTimer = 0;
+    sim.playerBullets.push({
+      id: 4000 + hit,
+      x: sim.boss!.x,
+      y: sim.boss!.y,
+      vx: 0,
+      vy: -800,
+      radius: 4,
+      active: true,
+    });
+    stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+    assert.ok(sim.boss !== null);
+    assert.equal(sim.boss.hp, BOSS_MAX_HP - hit);
+  }
+
+  // 20th hit -> removes boss, spawns destroy particles, advances to wave 6, and resumes enemy spawning
+  sim.hitstopTimer = 0;
+  sim.playerBullets.push({
+    id: 4020,
+    x: sim.boss!.x,
+    y: sim.boss!.y,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.boss, null);
+  assert.equal(sim.wave, 6);
+  assert.ok(sim.particles.some((p) => p.active), 'boss defeat should trigger particle burst');
+
+  // Advance ~0.6s -> normal enemy spawning resumes
+  sim.hitstopTimer = 0;
+  for (let i = 0; i < 16; i++) {
+    stepSimulation(sim, emptyInput(), 0.04, () => 0.5);
+  }
+  assert.ok(sim.enemies.length >= 1, 'normal enemy spawning must resume after boss defeat');
+});
+

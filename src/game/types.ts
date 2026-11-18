@@ -55,6 +55,21 @@ export interface Enemy {
   active: boolean;
 }
 
+export interface Boss {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  targetY: number;
+  radius: number;
+  hp: number;
+  maxHp: number;
+  hitFlashTimer: number;
+  spinAngle: number;
+  active: boolean;
+}
+
 export interface EnemyBullet {
   id: number;
   x: number;
@@ -116,6 +131,8 @@ export interface GameSnapshot {
   wave: number;
   lives: number;
   multiplier: number;
+  bossHp: number | null;
+  bossMaxHp: number | null;
   elapsedSeconds: number;
   kills: number;
   isNewBest: boolean;
@@ -128,6 +145,7 @@ export interface SimulationState {
   player: Player;
   playerBullets: PlayerBullet[];
   enemies: Enemy[];
+  boss: Boss | null;
   enemyBullets: EnemyBullet[];
   particles: Particle[];
   particleCursor: number;
@@ -143,6 +161,7 @@ export interface SimulationState {
   multiplier: number;
   comboTimer: number;
   wave: number;
+  waveProgressSeconds: number;
   waveBannerTimer: number;
   elapsedSeconds: number;
   spawnTimer: number;

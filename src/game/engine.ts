@@ -2,6 +2,12 @@ import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
   BEST_SCORE_STORAGE_KEY,
+  BOSS_ENTRY_SPEED,
+  BOSS_MAX_HP,
+  BOSS_RADIUS,
+  BOSS_SPEED,
+  BOSS_TARGET_Y,
+  BOSS_WAVE_INTERVAL,
   COLORS,
   COMBO_WINDOW_SECONDS,
   DEATH_BEAT_SECONDS,
@@ -29,6 +35,7 @@ import {
   WAVE_DURATION_SECONDS,
 } from './constants';
 import type {
+  Boss,
   DifficultyParams,
   Enemy,
   GameSnapshot,
@@ -166,6 +173,7 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     },
     playerBullets: [],
     enemies: [],
+    boss: null,
     enemyBullets: [],
     particles: createParticlePool(),
     particleCursor: 0,
@@ -181,6 +189,7 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     multiplier: 1,
     comboTimer: 0,
     wave: 1,
+    waveProgressSeconds: 0,
     waveBannerTimer: 0,
     elapsedSeconds: 0,
     spawnTimer: 0.55, // First enemy arrives smoothly shortly after start
@@ -256,6 +265,25 @@ export function spawnEnemy(sim: SimulationState, rng: () => number = Math.random
 
   sim.enemies.push(enemy);
   return enemy;
+}
+
+export function spawnBoss(sim: SimulationState): Boss {
+  const boss: Boss = {
+    id: sim.nextEntityId++,
+    x: sim.width / 2,
+    y: -BOSS_RADIUS,
+    vx: BOSS_SPEED,
+    vy: BOSS_ENTRY_SPEED,
+    targetY: BOSS_TARGET_Y,
+    radius: BOSS_RADIUS,
+    hp: BOSS_MAX_HP,
+    maxHp: BOSS_MAX_HP,
+    hitFlashTimer: 0,
+    spinAngle: 0,
+    active: true,
+  };
+  sim.boss = boss;
+  return boss;
 }
 
 function updateParticles(sim: SimulationState, dt: number): void {
@@ -400,8 +428,11 @@ export function stepSimulation(
     return;
   }
 
-  // Advance survival clock, combo decay, wave, and time bonus
+  // Advance survival clock, combo decay, wave (pausing wave timer during boss fights), and time bonus
   sim.elapsedSeconds += dt;
+  if (!sim.boss) {
+    sim.waveProgressSeconds += dt;
+  }
   if (sim.comboTimer > 0) {
     sim.comboTimer -= dt;
     if (sim.comboTimer <= 0) {
@@ -409,11 +440,14 @@ export function stepSimulation(
       sim.multiplier = 1;
     }
   }
-  const nextWave = getWaveFromTime(sim.elapsedSeconds);
+  const nextWave = getWaveFromTime(sim.waveProgressSeconds);
   if (nextWave > sim.wave) {
     sim.wave = nextWave;
     sim.waveBannerTimer = 1.65;
     sim.pendingEvents.push('waveUp');
+    if (sim.wave % BOSS_WAVE_INTERVAL === 0 && !sim.boss) {
+      spawnBoss(sim);
+    }
   }
   sim.timeScore = Math.floor(sim.elapsedSeconds) * TIME_BONUS_POINTS_PER_SECOND;
   sim.score = Math.floor(sim.killScore + sim.timeScore + sim.grazeScore);
@@ -489,12 +523,14 @@ export function stepSimulation(
     sim.pendingEvents.push('shoot');
   }
 
-  // Enemy spawning
+  // Enemy spawning (paused while a boss is active)
   const diff = getDifficultyParams(sim.elapsedSeconds);
-  sim.spawnTimer -= dt;
-  if (sim.spawnTimer <= 0) {
-    spawnEnemy(sim, rng);
-    sim.spawnTimer = diff.spawnInterval * (0.85 + rng() * 0.3);
+  if (!sim.boss) {
+    sim.spawnTimer -= dt;
+    if (sim.spawnTimer <= 0) {
+      spawnEnemy(sim, rng);
+      sim.spawnTimer = diff.spawnInterval * (0.85 + rng() * 0.3);
+    }
   }
 
   // Update player bullets
@@ -565,6 +601,28 @@ export function stepSimulation(
     }
   }
 
+  // Update boss movement (upper third side-to-side patrol, does not fire)
+  if (sim.boss && sim.boss.active) {
+    const boss = sim.boss;
+    boss.spinAngle += dt * 1.1;
+    if (boss.hitFlashTimer > 0) {
+      boss.hitFlashTimer = Math.max(0, boss.hitFlashTimer - dt);
+    }
+    if (boss.y < boss.targetY) {
+      boss.y = Math.min(boss.targetY, boss.y + boss.vy * dt);
+    }
+    boss.x += boss.vx * dt;
+    const minX = boss.radius + 48;
+    const maxX = sim.width - boss.radius - 48;
+    if (boss.x <= minX) {
+      boss.x = minX;
+      boss.vx = Math.abs(boss.vx);
+    } else if (boss.x >= maxX) {
+      boss.x = maxX;
+      boss.vx = -Math.abs(boss.vx);
+    }
+  }
+
   // Update enemy bullets
   for (let i = 0; i < sim.enemyBullets.length; i++) {
     const b = sim.enemyBullets[i];
@@ -576,10 +634,62 @@ export function stepSimulation(
     }
   }
 
-  // Collisions: Player bullets vs Enemies
+  // Collisions: Player bullets vs Boss & Enemies
   for (let i = 0; i < sim.playerBullets.length; i++) {
     const b = sim.playerBullets[i];
     if (!b.active) continue;
+
+    if (
+      sim.boss &&
+      sim.boss.active &&
+      circlesOverlap(b.x, b.y, b.radius, sim.boss.x, sim.boss.y, sim.boss.radius)
+    ) {
+      b.active = false;
+      sim.boss.hp = Math.max(0, sim.boss.hp - 1);
+      sim.boss.hitFlashTimer = 0.08;
+
+      if (sim.boss.hp <= 0) {
+        const bx = sim.boss.x;
+        const by = sim.boss.y;
+        sim.boss.active = false;
+        sim.boss = null;
+
+        sim.hitstopTimer = Math.max(sim.hitstopTimer, 0.045);
+        sim.trauma = Math.min(1, sim.trauma + 0.35);
+        spawnParticles(
+          sim,
+          bx,
+          by,
+          28,
+          [COLORS.violet, COLORS.magentaSoft, COLORS.magenta, COLORS.white],
+          80,
+          310,
+          rng,
+          true
+        );
+        sim.pendingEvents.push('enemyDestroy');
+
+        // Resume normal enemy spawning for the next wave
+        sim.wave += 1;
+        sim.waveProgressSeconds = (sim.wave - 1) * WAVE_DURATION_SECONDS;
+        sim.waveBannerTimer = 1.65;
+        sim.pendingEvents.push('waveUp');
+        sim.spawnTimer = 0.45;
+      } else {
+        spawnParticles(
+          sim,
+          b.x,
+          b.y,
+          4,
+          [COLORS.violet, COLORS.white],
+          40,
+          140,
+          rng,
+          false
+        );
+      }
+      continue;
+    }
 
     for (let j = 0; j < sim.enemies.length; j++) {
       const e = sim.enemies[j];
@@ -729,6 +839,8 @@ export function getSnapshot(sim: SimulationState): GameSnapshot {
     wave: sim.wave,
     lives: sim.lives,
     multiplier: sim.multiplier,
+    bossHp: sim.boss ? sim.boss.hp : null,
+    bossMaxHp: sim.boss ? sim.boss.maxHp : null,
     elapsedSeconds: sim.elapsedSeconds,
     kills: sim.kills,
     isNewBest: sim.isNewBest,

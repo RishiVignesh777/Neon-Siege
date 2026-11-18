@@ -5,6 +5,8 @@ interface GameHudProps {
   scoreRef?: RefObject<HTMLSpanElement | null>;
   multiplier: number;
   wave: number;
+  bossHp: number | null;
+  bossMaxHp: number | null;
   lives: number;
   maxLives: number;
   muted: boolean;
@@ -16,7 +18,7 @@ function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-6 w-6 shrink-0 sm:h-7 sm:w-7"
+      className="h-5 w-5 shrink-0 sm:h-7 sm:w-7"
       aria-hidden="true"
     >
       {filled && (
@@ -52,12 +54,16 @@ export function GameHud({
   scoreRef,
   multiplier,
   wave,
+  bossHp,
+  bossMaxHp,
   lives,
   maxLives,
   muted,
   onToggleMute,
   onTogglePause,
 }: GameHudProps) {
+  const showBossBar = bossHp !== null && bossMaxHp !== null && bossMaxHp > 0;
+  const bossPct = showBossBar ? Math.max(0, Math.min(100, (bossHp / bossMaxHp) * 100)) : 0;
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-start px-3 pt-2.5 sm:px-6 sm:pt-4"
@@ -90,7 +96,7 @@ export function GameHud({
         </div>
       </div>
 
-      {/* Center: Wave */}
+      {/* Center: Wave + Boss Health Bar when active */}
       <div className="flex flex-col items-center justify-self-center">
         <span className="text-[10px] font-semibold tracking-[0.18em] text-[#8ba1bd] uppercase sm:text-[11px]">
           Wave
@@ -102,6 +108,28 @@ export function GameHud({
         >
           {String(wave).padStart(2, '0')}
         </span>
+
+        {showBossBar && (
+          <div
+            data-testid="boss-health-bar"
+            className="mt-1 flex w-24 flex-col items-center sm:mt-1.5 sm:w-44"
+            aria-label={`Boss health: ${bossHp} of ${bossMaxHp}`}
+          >
+            <div className="mb-0.5 flex w-full items-center justify-between text-[9px] font-semibold tracking-[0.14em] text-[#d8b4fe] uppercase sm:mb-1 sm:text-[10px]">
+              <span>Boss</span>
+              <span className="font-mono-num" data-testid="boss-hp-text">
+                {bossHp}/{bossMaxHp}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-sm border border-[#a855f7]/60 bg-[#0b0818] sm:h-2">
+              <div
+                data-testid="boss-health-fill"
+                className="h-full bg-gradient-to-r from-[#8b5cf6] via-[#a855f7] to-[#e9d5ff] transition-[width] duration-75"
+                style={{ width: `${bossPct}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right: Lives (Hearts) + compact Mute/Pause */}

@@ -20,6 +20,13 @@ export const ENEMY_RADIUS = 17;
 export const ENEMY_BULLET_RADIUS = 4.5;
 export const ENEMY_TELEGRAPH_SECONDS = 0.28;
 
+export const BOSS_WAVE_INTERVAL = 5;
+export const BOSS_RADIUS = ENEMY_RADIUS * 2; // 34px (~2x regular enemy)
+export const BOSS_MAX_HP = 20;
+export const BOSS_SPEED = 115;
+export const BOSS_ENTRY_SPEED = 120;
+export const BOSS_TARGET_Y = 152; // Upper third of 720px arena, clear of top-center HUD bar
+
 export const WAVE_DURATION_SECONDS = 15;
 export const TIME_BONUS_POINTS_PER_SECOND = 10;
 export const KILL_BASE_POINTS = 100;
