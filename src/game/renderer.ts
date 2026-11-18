@@ -7,7 +7,7 @@ import {
   MAX_GRAZE_POPUPS,
   MAX_PARTICLES,
 } from './constants';
-import type { Boss, Enemy, SimulationState } from './types';
+import type { Boss, Enemy, PowerUpPickup, SimulationState } from './types';
 
 interface BgMote {
   x: number;
@@ -189,6 +189,24 @@ function drawPlayer(ctx: CanvasRenderingContext2D, sim: SimulationState, timeSec
     ctx.rotate(timeSec * 3.5);
     ctx.beginPath();
     ctx.arc(0, 0, p.radius + 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Active shield power-up barrier around ship
+  if (sim.activePowerUp === 'shield') {
+    const pulse = 0.8 + Math.sin(timeSec * 6) * 0.2;
+    ctx.save();
+    ctx.strokeStyle = `rgba(0, 245, 255, ${0.26 * pulse})`;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.radius + 7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.cyanSoft;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.radius + 7, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -428,20 +446,127 @@ function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss): void {
   ctx.restore();
 }
 
+function drawPowerUp(ctx: CanvasRenderingContext2D, pickup: PowerUpPickup, timeSec: number): void {
+  ctx.save();
+  ctx.translate(pickup.x, pickup.y);
+  const pulse = 1 + Math.sin(timeSec * 5 + pickup.id) * 0.06;
+  ctx.scale(pulse, pulse);
+
+  const r = pickup.radius;
+
+  if (pickup.type === 'shield') {
+    // Cyan shield crest inside octagonal badge
+    ctx.fillStyle = 'rgba(0, 245, 255, 0.16)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#07222e';
+    ctx.strokeStyle = COLORS.cyan;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Inner shield crest
+    ctx.fillStyle = COLORS.cyanSoft;
+    ctx.strokeStyle = COLORS.white;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, -7.5);
+    ctx.lineTo(6.5, -4.5);
+    ctx.lineTo(5.5, 2.5);
+    ctx.lineTo(0, 8);
+    ctx.lineTo(-5.5, 2.5);
+    ctx.lineTo(-6.5, -4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (pickup.type === 'rapid_fire') {
+    // Amber-gold diamond badge with double upward chevron
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.18)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r, 0);
+    ctx.lineTo(0, r);
+    ctx.lineTo(-r, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#2a1805';
+    ctx.fill();
+    ctx.strokeStyle = COLORS.gold;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Double upward chevrons
+    ctx.strokeStyle = '#fef3c7';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-4.5, -1);
+    ctx.lineTo(0, -5.5);
+    ctx.lineTo(4.5, -1);
+    ctx.moveTo(-4.5, 4.5);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(4.5, 4.5);
+    ctx.stroke();
+  } else {
+    // Emerald-green rounded hex badge with 3-ray spread icon
+    ctx.fillStyle = 'rgba(52, 211, 153, 0.18)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    traceHexagonPath(ctx, r);
+    ctx.fillStyle = '#06281c';
+    ctx.fill();
+    ctx.strokeStyle = COLORS.emerald;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 3 diverging shot rays
+    ctx.strokeStyle = '#d1fae5';
+    ctx.lineWidth = 1.9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 6);
+    ctx.lineTo(0, -6.5);
+    ctx.moveTo(0, 6);
+    ctx.lineTo(-5.5, -4.5);
+    ctx.moveTo(0, 6);
+    ctx.lineTo(5.5, -4.5);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawBullets(ctx: CanvasRenderingContext2D, sim: SimulationState): void {
-  // Player bullets (cyan vertical laser bolts)
+  // Player bullets (cyan laser bolts, rotated along velocity for spread shots)
   for (let i = 0; i < sim.playerBullets.length; i++) {
     const b = sim.playerBullets[i];
     if (!b.active) continue;
 
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    if (b.vx !== 0) {
+      ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+    }
+
     ctx.fillStyle = 'rgba(0, 245, 255, 0.28)';
-    ctx.fillRect(b.x - 4, b.y - 10, 8, 20);
+    ctx.fillRect(-4, -10, 8, 20);
 
     ctx.fillStyle = COLORS.cyan;
-    ctx.fillRect(b.x - 2, b.y - 8, 4, 16);
+    ctx.fillRect(-2, -8, 4, 16);
 
     ctx.fillStyle = COLORS.white;
-    ctx.fillRect(b.x - 1, b.y - 6, 2, 10);
+    ctx.fillRect(-1, -6, 2, 10);
+    ctx.restore();
   }
 
   // Enemy bullets (glowing magenta-violet orbs)
@@ -555,6 +680,10 @@ export function renderSimulation(
 
   if (sim.phase !== 'title') {
     drawBullets(ctx, sim);
+    for (let i = 0; i < sim.powerUps.length; i++) {
+      const p = sim.powerUps[i];
+      if (p.active) drawPowerUp(ctx, p, timeSec);
+    }
     for (let i = 0; i < sim.enemies.length; i++) {
       const e = sim.enemies[i];
       if (e.active) drawEnemy(ctx, e);

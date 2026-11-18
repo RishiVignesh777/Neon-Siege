@@ -35,6 +35,10 @@ import {
   PLAYER_HIT_RADIUS,
   PLAYER_RADIUS,
   PLAYER_SPEED,
+  PLAYER_SPREAD_ANGLE_RAD,
+  POWERUP_DURATION_SECONDS,
+  POWERUP_FALL_SPEED,
+  POWERUP_RADIUS,
   TIME_BONUS_POINTS_PER_SECOND,
   WAVE_DURATION_SECONDS,
 } from './constants';
@@ -46,8 +50,16 @@ import type {
   GrazePopup,
   InputState,
   Particle,
+  PowerUpPickup,
+  PowerUpType,
   SimulationState,
 } from './types';
+
+export const POWERUP_TYPES: readonly PowerUpType[] = [
+  'shield',
+  'rapid_fire',
+  'spread_shot',
+];
 
 function createParticlePool(): Particle[] {
   const pool: Particle[] = new Array(MAX_PARTICLES);
@@ -186,6 +198,9 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     playerBullets: [],
     enemies: [],
     boss: null,
+    powerUps: [],
+    activePowerUp: null,
+    powerUpTimer: 0,
     enemyBullets: [],
     particles: createParticlePool(),
     particleCursor: 0,
@@ -298,6 +313,29 @@ export function spawnBoss(sim: SimulationState): Boss {
   };
   sim.boss = boss;
   return boss;
+}
+
+export function spawnPowerUp(
+  sim: SimulationState,
+  x: number,
+  y: number,
+  rng: () => number = Math.random,
+  forcedType?: PowerUpType
+): PowerUpPickup {
+  const type =
+    forcedType ??
+    POWERUP_TYPES[Math.min(POWERUP_TYPES.length - 1, Math.floor(rng() * POWERUP_TYPES.length))];
+  const pickup: PowerUpPickup = {
+    id: sim.nextEntityId++,
+    type,
+    x,
+    y,
+    vy: POWERUP_FALL_SPEED,
+    radius: POWERUP_RADIUS,
+    active: true,
+  };
+  sim.powerUps.push(pickup);
+  return pickup;
 }
 
 function updateParticles(sim: SimulationState, dt: number): void {
@@ -507,7 +545,16 @@ export function stepSimulation(
     sim.player.muzzleFlashTimer = Math.max(0, sim.player.muzzleFlashTimer - dt);
   }
 
-  // Player firing with ~220ms cooldown + input buffering
+  // Active timed power-up countdown (shield persists until hit or replaced)
+  if (sim.activePowerUp === 'rapid_fire' || sim.activePowerUp === 'spread_shot') {
+    sim.powerUpTimer -= dt;
+    if (sim.powerUpTimer <= 0) {
+      sim.powerUpTimer = 0;
+      sim.activePowerUp = null;
+    }
+  }
+
+  // Player firing with ~220ms cooldown (halved under rapid_fire) + input buffering
   if (sim.player.fireCooldown > 0) {
     sim.player.fireCooldown = Math.max(0, sim.player.fireCooldown - dt);
   }
@@ -519,21 +566,30 @@ export function stepSimulation(
 
   const wantsToFire = input.fireHeld || sim.player.fireBufferTimer > 0;
   if (wantsToFire && sim.player.fireCooldown <= 0) {
-    sim.player.fireCooldown = FIRE_COOLDOWN_SECONDS;
+    const cooldown =
+      sim.activePowerUp === 'rapid_fire' ? FIRE_COOLDOWN_SECONDS * 0.5 : FIRE_COOLDOWN_SECONDS;
+    sim.player.fireCooldown = cooldown;
     sim.player.fireBufferTimer = 0;
     sim.player.muzzleFlashTimer = 0.06;
     sim.player.squashX = 0.88;
     sim.player.squashY = 1.14;
 
-    sim.playerBullets.push({
-      id: sim.nextEntityId++,
-      x: sim.player.x,
-      y: sim.player.y - sim.player.radius - 4,
-      vx: 0,
-      vy: -PLAYER_BULLET_SPEED,
-      radius: PLAYER_BULLET_RADIUS,
-      active: true,
-    });
+    const offsets =
+      sim.activePowerUp === 'spread_shot'
+        ? [-PLAYER_SPREAD_ANGLE_RAD, 0, PLAYER_SPREAD_ANGLE_RAD]
+        : [0];
+    for (let s = 0; s < offsets.length; s++) {
+      const angle = offsets[s];
+      sim.playerBullets.push({
+        id: sim.nextEntityId++,
+        x: sim.player.x,
+        y: sim.player.y - sim.player.radius - 4,
+        vx: Math.sin(angle) * PLAYER_BULLET_SPEED,
+        vy: -Math.cos(angle) * PLAYER_BULLET_SPEED,
+        radius: PLAYER_BULLET_RADIUS,
+        active: true,
+      });
+    }
     sim.pendingEvents.push('shoot');
   }
 
@@ -553,7 +609,7 @@ export function stepSimulation(
     if (!b.active) continue;
     b.x += b.vx * dt;
     b.y += b.vy * dt;
-    if (b.y < -20) {
+    if (b.y < -20 || b.x < -20 || b.x > sim.width + 20) {
       b.active = false;
     }
   }
@@ -709,6 +765,9 @@ export function stepSimulation(
         );
         sim.pendingEvents.push('enemyDestroy');
 
+        // Drop one random power-up straight down from the boss's position
+        spawnPowerUp(sim, bx, by, rng);
+
         // Resume normal enemy spawning for the next wave
         sim.wave += 1;
         sim.waveProgressSeconds = (sim.wave - 1) * WAVE_DURATION_SECONDS;
@@ -855,11 +914,60 @@ export function stepSimulation(
     }
 
     if (hit) {
-      triggerPlayerDamage(sim, rng);
+      if (sim.activePowerUp === 'shield') {
+        sim.activePowerUp = null;
+        sim.powerUpTimer = 0;
+        sim.player.invulnTimer = INVULNERABILITY_SECONDS;
+        sim.hitstopTimer = 0.04;
+        sim.trauma = Math.min(1, sim.trauma + 0.35);
+        spawnParticles(
+          sim,
+          sim.player.x,
+          sim.player.y,
+          18,
+          [COLORS.cyan, COLORS.cyanSoft, COLORS.white],
+          70,
+          260,
+          rng,
+          true
+        );
+        sim.pendingEvents.push('shieldBreak');
+      } else {
+        triggerPlayerDamage(sim, rng);
+      }
     }
   }
 
-  // Compact inactive bullets/enemies cleanly
+  // Update power-up pickups (fall straight down, collect on proximity, remove off bottom)
+  for (let i = 0; i < sim.powerUps.length; i++) {
+    const p = sim.powerUps[i];
+    if (!p.active) continue;
+    p.y += p.vy * dt;
+
+    if (p.y > sim.height + p.radius + 20) {
+      p.active = false;
+      continue;
+    }
+
+    if (
+      sim.dyingTimer <= 0 &&
+      circlesOverlap(p.x, p.y, p.radius, sim.player.x, sim.player.y, sim.player.radius + 6)
+    ) {
+      p.active = false;
+      sim.activePowerUp = p.type;
+      sim.powerUpTimer = p.type === 'shield' ? 0 : POWERUP_DURATION_SECONDS;
+      const burstColor =
+        p.type === 'shield'
+          ? COLORS.cyan
+          : p.type === 'rapid_fire'
+            ? COLORS.gold
+            : COLORS.emerald;
+      spawnParticles(sim, p.x, p.y, 14, [burstColor, COLORS.white], 55, 200, rng, false);
+      sim.pendingEvents.push('powerUp');
+    }
+  }
+
+  // Compact inactive bullets/enemies/pickups cleanly
   if (sim.playerBullets.length > 0) {
     sim.playerBullets = sim.playerBullets.filter((b) => b.active);
   }
@@ -868,6 +976,9 @@ export function stepSimulation(
   }
   if (sim.enemies.length > 0) {
     sim.enemies = sim.enemies.filter((e) => e.active);
+  }
+  if (sim.powerUps.length > 0) {
+    sim.powerUps = sim.powerUps.filter((p) => p.active);
   }
 }
 

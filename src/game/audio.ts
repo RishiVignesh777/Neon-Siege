@@ -66,6 +66,16 @@ export class NeonAudio {
         this.tone(ctx, 'sine', 1240 * pitchVar, 1760 * pitchVar, 0.065, 0.035, now);
         break;
       }
+      case 'powerUp': {
+        this.tone(ctx, 'triangle', 523.25, 659.25, 0.09, 0.07, now);
+        this.tone(ctx, 'triangle', 659.25, 1046.5, 0.14, 0.08, now + 0.06);
+        break;
+      }
+      case 'shieldBreak': {
+        this.tone(ctx, 'triangle', 720, 220, 0.18, 0.11, now);
+        this.tone(ctx, 'sine', 480, 140, 0.2, 0.08, now + 0.03);
+        break;
+      }
       case 'waveUp': {
         this.tone(ctx, 'triangle', 440, 440, 0.1, 0.07, now);
         this.tone(ctx, 'triangle', 554.37, 554.37, 0.1, 0.07, now + 0.07);

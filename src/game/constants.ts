@@ -11,6 +11,11 @@ export const FIRE_COOLDOWN_SECONDS = 0.22; // ~220ms
 export const FIRE_INPUT_BUFFER_SECONDS = 0.09;
 export const PLAYER_BULLET_SPEED = 820;
 export const PLAYER_BULLET_RADIUS = 4;
+export const PLAYER_SPREAD_ANGLE_RAD = 0.14;
+
+export const POWERUP_RADIUS = 14;
+export const POWERUP_FALL_SPEED = 90;
+export const POWERUP_DURATION_SECONDS = 10;
 
 export const MAX_LIVES = 3;
 export const INVULNERABILITY_SECONDS = 1.4;
@@ -54,5 +59,7 @@ export const COLORS = {
   violet: '#8b5cf6',
   violetDim: 'rgba(139, 92, 246, 0.14)',
   cyanDim: 'rgba(0, 245, 255, 0.16)',
+  gold: '#fbbf24',
+  emerald: '#34d399',
   white: '#f4fbff',
 } as const;

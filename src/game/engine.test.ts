@@ -20,6 +20,9 @@ import {
   PLAYER_HIT_RADIUS,
   PLAYER_RADIUS,
   PLAYER_SPEED,
+  PLAYER_SPREAD_ANGLE_RAD,
+  POWERUP_DURATION_SECONDS,
+  POWERUP_FALL_SPEED,
   WAVE_DURATION_SECONDS,
 } from './constants';
 import {
@@ -32,6 +35,7 @@ import {
   getWaveFromTime,
   spawnBoss,
   spawnEnemy,
+  spawnPowerUp,
   stepSimulation,
 } from './engine';
 import type { InputState } from './types';
@@ -469,5 +473,123 @@ test('boss fires 3-bullet narrow fan toward player, ramps interval from 1.8s to 
   stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
   assert.equal(sim.lives, 2);
   assert.ok(sim.player.invulnTimer > 1.3 && sim.player.invulnTimer <= INVULNERABILITY_SECONDS);
+});
+
+test('boss defeat drops a random power-up that falls straight down and removes offscreen if missed', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  sim.wave = 5;
+  const boss = spawnBoss(sim);
+  boss.x = 340;
+  boss.y = 152;
+  boss.hp = 1;
+
+  sim.playerBullets.push({
+    id: 5001,
+    x: 340,
+    y: 152,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+
+  // rng = 0.0 -> 'shield', 0.4 -> 'rapid_fire', 0.8 -> 'spread_shot'
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.4);
+  assert.equal(sim.boss, null);
+  assert.equal(sim.powerUps.length, 1);
+  assert.equal(sim.powerUps[0].type, 'rapid_fire');
+  const dropX = sim.powerUps[0].x;
+  assert.ok(Math.abs(dropX - 340) < 3, 'pickup spawns at boss x');
+  assert.equal(sim.powerUps[0].vy, POWERUP_FALL_SPEED);
+
+  // Move player away and step until pickup drifts off bottom (x stays unchanged)
+  sim.player.x = 800;
+  sim.hitstopTimer = 0;
+  for (let i = 0; i < 200 && sim.powerUps.length > 0; i++) {
+    if (sim.powerUps[0]) {
+      assert.equal(sim.powerUps[0].x, dropX, 'pickup falls straight down');
+    }
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  assert.equal(sim.powerUps.length, 0);
+  assert.equal(sim.activePowerUp, null);
+});
+
+test('power-ups: shield absorbs next hit, rapid fire halves cooldown for 10s, spread shot fires 3 bullets for 10s, and new pickup replaces old', () => {
+  const sim = createInitialSimulation(0, 'playing');
+
+  // 1. Collect shield and absorb a direct bullet hit without losing a life
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'shield');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.powerUps.length, 0);
+  assert.equal(sim.activePowerUp, 'shield');
+
+  sim.enemyBullets.push({
+    id: 6001,
+    x: sim.player.x,
+    y: sim.player.y,
+    vx: 0,
+    vy: 150,
+    radius: 4.5,
+    grazed: false,
+    inGrazeRing: false,
+    grazeX: sim.player.x,
+    grazeY: sim.player.y,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.lives, 3, 'shield should absorb hit without losing life');
+  assert.equal(sim.activePowerUp, null, 'shield should be consumed on hit');
+  assert.ok(sim.player.invulnTimer > 1.3);
+
+  // 2. Collect rapid_fire -> halves cooldown (~0.11s) for 10s, then expires
+  sim.hitstopTimer = 0;
+  sim.player.invulnTimer = 0;
+  sim.player.fireCooldown = 0;
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'rapid_fire');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.activePowerUp, 'rapid_fire');
+
+  stepSimulation(sim, emptyInput({ fireHeld: true, fireJustPressed: true }), 0.016, () => 0.5);
+  assert.ok(Math.abs(sim.player.fireCooldown - FIRE_COOLDOWN_SECONDS * 0.5) < 0.001);
+
+  // Wait 0.12s -> fires again (normal 0.22s cooldown would block this)
+  for (let i = 0; i < 6; i++) {
+    stepSimulation(sim, emptyInput({ fireHeld: true }), 0.02, () => 0.5);
+  }
+  assert.equal(sim.playerBullets.length, 2);
+
+  // 3. Collect spread_shot while rapid_fire is still active -> replaces rapid_fire!
+  spawnPowerUp(sim, sim.player.x, sim.player.y, () => 0, 'spread_shot');
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.activePowerUp, 'spread_shot');
+  assert.ok(sim.powerUpTimer > 9.9 && sim.powerUpTimer <= POWERUP_DURATION_SECONDS);
+
+  // Fire spread shot -> 3 bullets in narrow fan and normal cooldown restored (no longer halved)
+  sim.playerBullets.length = 0;
+  sim.player.fireCooldown = 0;
+  stepSimulation(sim, emptyInput({ fireHeld: true, fireJustPressed: true }), 0.016, () => 0.5);
+  assert.equal(sim.playerBullets.length, 3);
+  assert.ok(Math.abs(sim.player.fireCooldown - FIRE_COOLDOWN_SECONDS) < 0.001);
+
+  const spreadAngles = sim.playerBullets
+    .map((b) => Math.atan2(b.vx, -b.vy))
+    .sort((a, b) => a - b);
+  assert.ok(Math.abs(spreadAngles[0] + PLAYER_SPREAD_ANGLE_RAD) < 0.001);
+  assert.ok(Math.abs(spreadAngles[1]) < 0.001);
+  assert.ok(Math.abs(spreadAngles[2] - PLAYER_SPREAD_ANGLE_RAD) < 0.001);
+
+  // Advance past 10s -> spread_shot expires back to single shot
+  for (let i = 0; i < 210; i++) {
+    sim.player.invulnTimer = 1.0;
+    sim.hitstopTimer = 0;
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
+  }
+  assert.equal(sim.activePowerUp, null);
+  sim.enemies.length = 0;
+  sim.hitstopTimer = 0;
+  sim.playerBullets.length = 0;
+  stepSimulation(sim, emptyInput({ fireHeld: true, fireJustPressed: true }), 0.016, () => 0.5);
+  assert.equal(sim.playerBullets.length, 1);
 });
 

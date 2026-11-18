@@ -1,11 +1,15 @@
 export type GamePhase = 'title' | 'playing' | 'paused' | 'gameover';
 
+export type PowerUpType = 'shield' | 'rapid_fire' | 'spread_shot';
+
 export type SoundEvent =
   | 'shoot'
   | 'enemyDestroy'
   | 'enemyTelegraph'
   | 'playerHit'
   | 'graze'
+  | 'powerUp'
+  | 'shieldBreak'
   | 'waveUp'
   | 'gameOver'
   | 'start';
@@ -69,6 +73,16 @@ export interface Boss {
   fightElapsedSeconds: number;
   hitFlashTimer: number;
   spinAngle: number;
+  active: boolean;
+}
+
+export interface PowerUpPickup {
+  id: number;
+  type: PowerUpType;
+  x: number;
+  y: number;
+  vy: number;
+  radius: number;
   active: boolean;
 }
 
@@ -148,6 +162,9 @@ export interface SimulationState {
   playerBullets: PlayerBullet[];
   enemies: Enemy[];
   boss: Boss | null;
+  powerUps: PowerUpPickup[];
+  activePowerUp: PowerUpType | null;
+  powerUpTimer: number;
   enemyBullets: EnemyBullet[];
   particles: Particle[];
   particleCursor: number;
