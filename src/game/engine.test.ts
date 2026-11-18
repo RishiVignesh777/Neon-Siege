@@ -3,8 +3,12 @@ import test from 'node:test';
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
+  BOSS_FIRE_RAMP_SECONDS,
+  BOSS_INITIAL_FIRE_INTERVAL,
   BOSS_MAX_HP,
+  BOSS_MIN_FIRE_INTERVAL,
   BOSS_RADIUS,
+  BOSS_VOLLEY_SPREAD_RAD,
   DEATH_BEAT_SECONDS,
   ENEMY_RADIUS,
   ENEMY_TELEGRAPH_SECONDS,
@@ -21,10 +25,12 @@ import {
 import {
   clampPlayerPosition,
   createInitialSimulation,
+  getBossFireInterval,
   getDifficultyParams,
   getKillPoints,
   getLowerZoneMinY,
   getWaveFromTime,
+  spawnBoss,
   spawnEnemy,
   stepSimulation,
 } from './engine';
@@ -351,7 +357,7 @@ test('wave 5 spawns a 20-HP boss, pauses normal enemy spawning, patrols upper th
   assert.equal(sim.boss.radius, BOSS_RADIUS);
   assert.equal(sim.enemies.length, 0);
 
-  // Patrol across several seconds -> stays in upper third, moves side to side, never spawns enemies or bullets
+  // Patrol across 1.5s (before first 1.8s volley) -> stays in upper third, moves side to side, pauses enemies
   const initialX = sim.boss.x;
   let minX = initialX;
   let maxX = initialX;
@@ -360,9 +366,10 @@ test('wave 5 spawns a 20-HP boss, pauses normal enemy spawning, patrols upper th
     assert.ok(sim.boss !== null);
     assert.ok(sim.boss.y <= ARENA_HEIGHT / 3, `boss y=${sim.boss.y} should stay in upper third`);
     assert.equal(sim.enemies.length, 0, 'normal enemy spawning must stay paused during boss');
-    assert.equal(sim.enemyBullets.length, 0, 'boss must not fire yet');
     minX = Math.min(minX, sim.boss.x);
     maxX = Math.max(maxX, sim.boss.x);
+    // Keep player alive if any boss volley bullet passes near center during patrol test
+    sim.player.invulnTimer = 1.0;
   }
   assert.ok(maxX - minX > 200, 'boss should drift side to side across the upper third');
   assert.equal(sim.wave, 5, 'wave should stay at 5 while boss is alive');
@@ -406,5 +413,61 @@ test('wave 5 spawns a 20-HP boss, pauses normal enemy spawning, patrols upper th
     stepSimulation(sim, emptyInput(), 0.04, () => 0.5);
   }
   assert.ok(sim.enemies.length >= 1, 'normal enemy spawning must resume after boss defeat');
+});
+
+test('boss fires 3-bullet narrow fan toward player, ramps interval from 1.8s to 0.8s over 15s, and uses standard player collision', () => {
+  assert.equal(getBossFireInterval(0), BOSS_INITIAL_FIRE_INTERVAL);
+  assert.ok(
+    Math.abs(getBossFireInterval(BOSS_FIRE_RAMP_SECONDS / 2) - 1.3) < 0.001,
+    'midpoint fire interval should interpolate linearly'
+  );
+  assert.equal(getBossFireInterval(BOSS_FIRE_RAMP_SECONDS), BOSS_MIN_FIRE_INTERVAL);
+  assert.equal(getBossFireInterval(BOSS_FIRE_RAMP_SECONDS + 10), BOSS_MIN_FIRE_INTERVAL);
+
+  const sim = createInitialSimulation(0, 'playing');
+  sim.wave = 5;
+  sim.elapsedSeconds = WAVE_DURATION_SECONDS * 4;
+  sim.waveProgressSeconds = WAVE_DURATION_SECONDS * 4;
+  const boss = spawnBoss(sim);
+
+  // Before 1.8s -> no volley yet
+  for (let i = 0; i < 34; i++) {
+    stepSimulation(sim, emptyInput(), 0.05, () => 0.5); // 1.70s
+  }
+  assert.equal(sim.enemyBullets.length, 0);
+
+  // Cross 1.8s -> fires 3 bullets in a narrow fan aimed toward player
+  for (let i = 0; i < 4 && sim.enemyBullets.length === 0; i++) {
+    stepSimulation(sim, emptyInput(), 0.04, () => 0.5);
+  }
+  assert.equal(sim.enemyBullets.length, 3);
+
+  const angles = sim.enemyBullets.map((b) => Math.atan2(b.vy, b.vx)).sort((a, b) => a - b);
+  const spreadLeft = angles[1] - angles[0];
+  const spreadRight = angles[2] - angles[1];
+  assert.ok(Math.abs(spreadLeft - BOSS_VOLLEY_SPREAD_RAD) < 0.001);
+  assert.ok(Math.abs(spreadRight - BOSS_VOLLEY_SPREAD_RAD) < 0.001);
+
+  const toPlayerAngle = Math.atan2(sim.player.y - boss.y, sim.player.x - boss.x);
+  assert.ok(Math.abs(angles[1] - toPlayerAngle) < 0.05, 'center bullet aims in player general direction');
+
+  // After 15s of boss fight, fireTimer resets to ~0.8s floor
+  sim.enemyBullets.length = 0;
+  boss.fightElapsedSeconds = BOSS_FIRE_RAMP_SECONDS;
+  boss.fireTimer = 0.02;
+  stepSimulation(sim, emptyInput(), 0.03, () => 0.5);
+  assert.equal(sim.enemyBullets.length, 3);
+  assert.ok(
+    Math.abs(boss.fireTimer - BOSS_MIN_FIRE_INTERVAL) < 0.001,
+    `expected fireTimer near ${BOSS_MIN_FIRE_INTERVAL}, got ${boss.fireTimer}`
+  );
+
+  // Verify boss bullet triggers standard hit & 1.4s invulnerability when reaching player hit radius
+  const hitBullet = sim.enemyBullets[1];
+  hitBullet.x = sim.player.x;
+  hitBullet.y = sim.player.y;
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.lives, 2);
+  assert.ok(sim.player.invulnTimer > 1.3 && sim.player.invulnTimer <= INVULNERABILITY_SECONDS);
 });
 

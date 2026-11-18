@@ -65,6 +65,8 @@ export interface Boss {
   radius: number;
   hp: number;
   maxHp: number;
+  fireTimer: number;
+  fightElapsedSeconds: number;
   hitFlashTimer: number;
   spinAngle: number;
   active: boolean;

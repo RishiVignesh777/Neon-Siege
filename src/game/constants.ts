@@ -26,6 +26,10 @@ export const BOSS_MAX_HP = 20;
 export const BOSS_SPEED = 115;
 export const BOSS_ENTRY_SPEED = 120;
 export const BOSS_TARGET_Y = 152; // Upper third of 720px arena, clear of top-center HUD bar
+export const BOSS_INITIAL_FIRE_INTERVAL = 1.8;
+export const BOSS_MIN_FIRE_INTERVAL = 0.8;
+export const BOSS_FIRE_RAMP_SECONDS = 15;
+export const BOSS_VOLLEY_SPREAD_RAD = 0.16; // Narrow 3-bullet fan (~9.2 deg step)
 
 export const WAVE_DURATION_SECONDS = 15;
 export const TIME_BONUS_POINTS_PER_SECOND = 10;

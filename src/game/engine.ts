@@ -3,10 +3,14 @@ import {
   ARENA_WIDTH,
   BEST_SCORE_STORAGE_KEY,
   BOSS_ENTRY_SPEED,
+  BOSS_FIRE_RAMP_SECONDS,
+  BOSS_INITIAL_FIRE_INTERVAL,
   BOSS_MAX_HP,
+  BOSS_MIN_FIRE_INTERVAL,
   BOSS_RADIUS,
   BOSS_SPEED,
   BOSS_TARGET_Y,
+  BOSS_VOLLEY_SPREAD_RAD,
   BOSS_WAVE_INTERVAL,
   COLORS,
   COMBO_WINDOW_SECONDS,
@@ -121,6 +125,14 @@ export function getDifficultyParams(elapsedSeconds: number): DifficultyParams {
     enemyBulletSpeed,
     enemyFireInterval,
   };
+}
+
+export function getBossFireInterval(fightElapsedSeconds: number): number {
+  const progress = Math.max(0, Math.min(1, fightElapsedSeconds / BOSS_FIRE_RAMP_SECONDS));
+  return (
+    BOSS_INITIAL_FIRE_INTERVAL -
+    (BOSS_INITIAL_FIRE_INTERVAL - BOSS_MIN_FIRE_INTERVAL) * progress
+  );
 }
 
 export function getKillPoints(wave: number, multiplier = 1): number {
@@ -278,6 +290,8 @@ export function spawnBoss(sim: SimulationState): Boss {
     radius: BOSS_RADIUS,
     hp: BOSS_MAX_HP,
     maxHp: BOSS_MAX_HP,
+    fireTimer: BOSS_INITIAL_FIRE_INTERVAL,
+    fightElapsedSeconds: 0,
     hitFlashTimer: 0,
     spinAngle: 0,
     active: true,
@@ -601,10 +615,11 @@ export function stepSimulation(
     }
   }
 
-  // Update boss movement (upper third side-to-side patrol, does not fire)
+  // Update boss movement & 3-bullet spread volley attack
   if (sim.boss && sim.boss.active) {
     const boss = sim.boss;
     boss.spinAngle += dt * 1.1;
+    boss.fightElapsedSeconds += dt;
     if (boss.hitFlashTimer > 0) {
       boss.hitFlashTimer = Math.max(0, boss.hitFlashTimer - dt);
     }
@@ -620,6 +635,31 @@ export function stepSimulation(
     } else if (boss.x >= maxX) {
       boss.x = maxX;
       boss.vx = -Math.abs(boss.vx);
+    }
+
+    boss.fireTimer -= dt;
+    if (boss.fireTimer <= 0) {
+      boss.fireTimer = getBossFireInterval(boss.fightElapsedSeconds);
+      const baseAngle = Math.atan2(sim.player.y - boss.y, sim.player.x - boss.x);
+      const aimJitter = (rng() - 0.5) * 0.08;
+      const spreadOffsets = [-BOSS_VOLLEY_SPREAD_RAD, 0, BOSS_VOLLEY_SPREAD_RAD];
+
+      for (let s = 0; s < spreadOffsets.length; s++) {
+        const angle = baseAngle + aimJitter + spreadOffsets[s];
+        sim.enemyBullets.push({
+          id: sim.nextEntityId++,
+          x: boss.x,
+          y: boss.y + boss.radius * 0.45,
+          vx: Math.cos(angle) * diff.enemyBulletSpeed,
+          vy: Math.sin(angle) * diff.enemyBulletSpeed,
+          radius: ENEMY_BULLET_RADIUS,
+          grazed: false,
+          inGrazeRing: false,
+          grazeX: boss.x,
+          grazeY: boss.y + boss.radius * 0.45,
+          active: true,
+        });
+      }
     }
   }
 
