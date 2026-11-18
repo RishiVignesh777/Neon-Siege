@@ -5,7 +5,8 @@ export const LOWER_ZONE_TOP_RATIO = 0.4; // Player confined to lower 60% of the 
 
 export const PLAYER_SPEED = 370;
 export const PLAYER_RADIUS = 15;
-export const PLAYER_HIT_RADIUS = 10;
+export const PLAYER_HIT_RADIUS = 14;
+export const PLAYER_GRAZE_RADIUS = 26;
 export const FIRE_COOLDOWN_SECONDS = 0.22; // ~220ms
 export const FIRE_INPUT_BUFFER_SECONDS = 0.09;
 export const PLAYER_BULLET_SPEED = 820;
@@ -24,8 +25,10 @@ export const TIME_BONUS_POINTS_PER_SECOND = 10;
 export const KILL_BASE_POINTS = 100;
 export const COMBO_WINDOW_SECONDS = 1.5;
 export const MAX_COMBO_MULTIPLIER = 10;
+export const GRAZE_BONUS_POINTS = 2;
 
 export const MAX_PARTICLES = 240;
+export const MAX_GRAZE_POPUPS = 24;
 export const MAX_DELTA_TIME = 0.05;
 
 export const BEST_SCORE_STORAGE_KEY = 'neon_siege_best_score';

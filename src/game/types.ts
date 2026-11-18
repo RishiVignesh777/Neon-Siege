@@ -5,6 +5,7 @@ export type SoundEvent =
   | 'enemyDestroy'
   | 'enemyTelegraph'
   | 'playerHit'
+  | 'graze'
   | 'waveUp'
   | 'gameOver'
   | 'start';
@@ -16,10 +17,12 @@ export interface Player {
   vy: number;
   radius: number;
   hitRadius: number;
+  grazeRadius: number;
   fireCooldown: number;
   fireBufferTimer: number;
   muzzleFlashTimer: number;
   invulnTimer: number;
+  grazeFlashTimer: number;
   squashX: number;
   squashY: number;
 }
@@ -59,7 +62,20 @@ export interface EnemyBullet {
   vx: number;
   vy: number;
   radius: number;
+  grazed: boolean;
+  inGrazeRing: boolean;
+  grazeX: number;
+  grazeY: number;
   active: boolean;
+}
+
+export interface GrazePopup {
+  active: boolean;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  amount: number;
 }
 
 export interface Particle {
@@ -120,6 +136,7 @@ export interface SimulationState {
   maxLives: number;
   killScore: number;
   timeScore: number;
+  grazeScore: number;
   score: number;
   bestScore: number;
   isNewBest: boolean;
@@ -134,5 +151,7 @@ export interface SimulationState {
   dyingTimer: number;
   trauma: number;
   gridOffset: number;
+  grazePopups: GrazePopup[];
+  grazePopupCursor: number;
   pendingEvents: SoundEvent[];
 }

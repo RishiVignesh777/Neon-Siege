@@ -10,15 +10,18 @@ import {
   ENEMY_TELEGRAPH_SECONDS,
   FIRE_COOLDOWN_SECONDS,
   FIRE_INPUT_BUFFER_SECONDS,
+  GRAZE_BONUS_POINTS,
   INVULNERABILITY_SECONDS,
   KILL_BASE_POINTS,
   LOWER_ZONE_TOP_RATIO,
   MAX_COMBO_MULTIPLIER,
   MAX_DELTA_TIME,
+  MAX_GRAZE_POPUPS,
   MAX_LIVES,
   MAX_PARTICLES,
   PLAYER_BULLET_RADIUS,
   PLAYER_BULLET_SPEED,
+  PLAYER_GRAZE_RADIUS,
   PLAYER_HIT_RADIUS,
   PLAYER_RADIUS,
   PLAYER_SPEED,
@@ -29,6 +32,7 @@ import type {
   DifficultyParams,
   Enemy,
   GameSnapshot,
+  GrazePopup,
   InputState,
   Particle,
   SimulationState,
@@ -50,6 +54,21 @@ function createParticlePool(): Particle[] {
       isShard: false,
       angle: 0,
       spin: 0,
+    };
+  }
+  return pool;
+}
+
+function createGrazePopupPool(): GrazePopup[] {
+  const pool: GrazePopup[] = new Array(MAX_GRAZE_POPUPS);
+  for (let i = 0; i < MAX_GRAZE_POPUPS; i++) {
+    pool[i] = {
+      active: false,
+      x: 0,
+      y: 0,
+      life: 0,
+      maxLife: 0.55,
+      amount: GRAZE_BONUS_POINTS,
     };
   }
   return pool;
@@ -136,10 +155,12 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
       vy: 0,
       radius: PLAYER_RADIUS,
       hitRadius: PLAYER_HIT_RADIUS,
+      grazeRadius: PLAYER_GRAZE_RADIUS,
       fireCooldown: 0,
       fireBufferTimer: 0,
       muzzleFlashTimer: 0,
       invulnTimer: 0,
+      grazeFlashTimer: 0,
       squashX: 1,
       squashY: 1,
     },
@@ -153,6 +174,7 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     maxLives: MAX_LIVES,
     killScore: 0,
     timeScore: 0,
+    grazeScore: 0,
     score: 0,
     bestScore: Math.max(0, Math.floor(bestScore)),
     isNewBest: false,
@@ -167,6 +189,8 @@ export function createInitialSimulation(bestScore = 0, phase: SimulationState['p
     dyingTimer: 0,
     trauma: 0,
     gridOffset: 0,
+    grazePopups: createGrazePopupPool(),
+    grazePopupCursor: 0,
     pendingEvents: [],
   };
 }
@@ -252,6 +276,30 @@ function updateParticles(sim: SimulationState, dt: number): void {
   }
 }
 
+function spawnGrazePopup(sim: SimulationState, x: number, y: number, amount: number): void {
+  const popup = sim.grazePopups[sim.grazePopupCursor];
+  sim.grazePopupCursor = (sim.grazePopupCursor + 1) % MAX_GRAZE_POPUPS;
+  popup.active = true;
+  popup.x = x;
+  popup.y = y;
+  popup.life = 0.55;
+  popup.maxLife = 0.55;
+  popup.amount = amount;
+}
+
+function updateGrazePopups(sim: SimulationState, dt: number): void {
+  for (let i = 0; i < MAX_GRAZE_POPUPS; i++) {
+    const popup = sim.grazePopups[i];
+    if (!popup.active) continue;
+    popup.life -= dt;
+    if (popup.life <= 0) {
+      popup.active = false;
+      continue;
+    }
+    popup.y -= 38 * dt;
+  }
+}
+
 function triggerPlayerDamage(sim: SimulationState, rng: () => number): void {
   sim.lives = Math.max(0, sim.lives - 1);
   sim.hitstopTimer = 0.055;
@@ -318,11 +366,13 @@ export function stepSimulation(
   if (sim.phase !== 'playing') {
     if (sim.phase === 'gameover') {
       updateParticles(sim, dt);
+      updateGrazePopups(sim, dt);
     }
     return;
   }
 
   updateParticles(sim, dt);
+  updateGrazePopups(sim, dt);
 
   if (sim.waveBannerTimer > 0) {
     sim.waveBannerTimer = Math.max(0, sim.waveBannerTimer - dt);
@@ -366,7 +416,7 @@ export function stepSimulation(
     sim.pendingEvents.push('waveUp');
   }
   sim.timeScore = Math.floor(sim.elapsedSeconds) * TIME_BONUS_POINTS_PER_SECOND;
-  sim.score = Math.floor(sim.killScore + sim.timeScore);
+  sim.score = Math.floor(sim.killScore + sim.timeScore + sim.grazeScore);
   if (sim.score > sim.bestScore) {
     sim.bestScore = sim.score;
     sim.isNewBest = true;
@@ -401,6 +451,9 @@ export function stepSimulation(
 
   if (sim.player.invulnTimer > 0) {
     sim.player.invulnTimer = Math.max(0, sim.player.invulnTimer - dt);
+  }
+  if (sim.player.grazeFlashTimer > 0) {
+    sim.player.grazeFlashTimer = Math.max(0, sim.player.grazeFlashTimer - dt);
   }
   if (sim.player.muzzleFlashTimer > 0) {
     sim.player.muzzleFlashTimer = Math.max(0, sim.player.muzzleFlashTimer - dt);
@@ -495,6 +548,10 @@ export function stepSimulation(
           vx: (dx / len) * diff.enemyBulletSpeed,
           vy: (dy / len) * diff.enemyBulletSpeed,
           radius: ENEMY_BULLET_RADIUS,
+          grazed: false,
+          inGrazeRing: false,
+          grazeX: e.x,
+          grazeY: e.y,
           active: true,
         });
       }
@@ -539,7 +596,7 @@ export function stepSimulation(
         }
         sim.comboTimer = COMBO_WINDOW_SECONDS;
         sim.killScore += getKillPoints(sim.wave, sim.multiplier);
-        sim.score = Math.floor(sim.killScore + sim.timeScore);
+        sim.score = Math.floor(sim.killScore + sim.timeScore + sim.grazeScore);
         if (sim.score > sim.bestScore) {
           sim.bestScore = sim.score;
           sim.isNewBest = true;
@@ -565,21 +622,66 @@ export function stepSimulation(
     }
   }
 
-  // Collisions: Enemy bullets & Enemies vs Player
-  if (sim.player.invulnTimer <= 0 && sim.dyingTimer <= 0) {
+  // Graze ring & Collisions: Enemy bullets & Enemies vs Player
+  if (sim.dyingTimer <= 0) {
     let hit = false;
 
     for (let i = 0; i < sim.enemyBullets.length; i++) {
       const b = sim.enemyBullets[i];
       if (!b.active) continue;
-      if (circlesOverlap(b.x, b.y, b.radius, sim.player.x, sim.player.y, sim.player.hitRadius)) {
-        b.active = false;
-        hit = true;
-        break;
+
+      const inHit = circlesOverlap(
+        b.x,
+        b.y,
+        b.radius,
+        sim.player.x,
+        sim.player.y,
+        sim.player.hitRadius
+      );
+
+      if (inHit) {
+        // Bullet entered hit radius -> disqualify from graze
+        b.grazed = true;
+        b.inGrazeRing = false;
+        if (sim.player.invulnTimer <= 0 && !hit) {
+          b.active = false;
+          hit = true;
+        }
+        continue;
+      }
+
+      if (!b.grazed) {
+        const inGraze = circlesOverlap(
+          b.x,
+          b.y,
+          b.radius,
+          sim.player.x,
+          sim.player.y,
+          sim.player.grazeRadius
+        );
+        if (inGraze) {
+          b.inGrazeRing = true;
+          b.grazeX = b.x;
+          b.grazeY = b.y;
+        } else if (b.inGrazeRing) {
+          // Exited graze ring cleanly without entering hit radius -> award +2 once
+          b.grazed = true;
+          b.inGrazeRing = false;
+          sim.grazeScore += GRAZE_BONUS_POINTS;
+          sim.score = Math.floor(sim.killScore + sim.timeScore + sim.grazeScore);
+          if (sim.score > sim.bestScore) {
+            sim.bestScore = sim.score;
+            sim.isNewBest = true;
+            saveBestScore(sim.bestScore);
+          }
+          sim.player.grazeFlashTimer = 0.16;
+          spawnGrazePopup(sim, b.grazeX, b.grazeY, GRAZE_BONUS_POINTS);
+          sim.pendingEvents.push('graze');
+        }
       }
     }
 
-    if (!hit) {
+    if (!hit && sim.player.invulnTimer <= 0) {
       for (let i = 0; i < sim.enemies.length; i++) {
         const e = sim.enemies[i];
         if (!e.active) continue;

@@ -61,6 +61,11 @@ export class NeonAudio {
         this.tone(ctx, 'square', 110, 42, 0.24, 0.12, now);
         break;
       }
+      case 'graze': {
+        const pitchVar = 0.96 + Math.random() * 0.08;
+        this.tone(ctx, 'sine', 1240 * pitchVar, 1760 * pitchVar, 0.065, 0.035, now);
+        break;
+      }
       case 'waveUp': {
         this.tone(ctx, 'triangle', 440, 440, 0.1, 0.07, now);
         this.tone(ctx, 'triangle', 554.37, 554.37, 0.1, 0.07, now + 0.07);

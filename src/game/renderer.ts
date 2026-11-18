@@ -4,6 +4,7 @@ import {
   COLORS,
   ENEMY_TELEGRAPH_SECONDS,
   LOWER_ZONE_TOP_RATIO,
+  MAX_GRAZE_POPUPS,
   MAX_PARTICLES,
 } from './constants';
 import type { Enemy, SimulationState } from './types';
@@ -191,6 +192,24 @@ function drawPlayer(ctx: CanvasRenderingContext2D, sim: SimulationState, timeSec
     ctx.stroke();
     ctx.restore();
   }
+
+  // Subtle 26px graze ring + brief bright flash on near-miss
+  ctx.save();
+  if (p.grazeFlashTimer > 0) {
+    const flashRatio = Math.min(1, p.grazeFlashTimer / 0.16);
+    ctx.strokeStyle = `rgba(103, 249, 255, ${0.22 + flashRatio * 0.65})`;
+    ctx.lineWidth = 1.4 + flashRatio * 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.grazeRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = 'rgba(0, 245, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.grazeRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   if (flashOff) {
     ctx.globalAlpha = 0.28;
@@ -434,6 +453,26 @@ function drawWaveBanner(ctx: CanvasRenderingContext2D, sim: SimulationState): vo
   ctx.restore();
 }
 
+function drawGrazePopups(ctx: CanvasRenderingContext2D, sim: SimulationState): void {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 13px "JetBrains Mono", monospace';
+  for (let i = 0; i < MAX_GRAZE_POPUPS; i++) {
+    const popup = sim.grazePopups[i];
+    if (!popup.active) continue;
+    const alpha = Math.max(0, Math.min(1, popup.life / popup.maxLife));
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = 'rgba(5, 6, 11, 0.85)';
+    ctx.lineWidth = 3;
+    const label = `+${popup.amount}`;
+    ctx.strokeText(label, popup.x, popup.y);
+    ctx.fillStyle = COLORS.cyanSoft;
+    ctx.fillText(label, popup.x, popup.y);
+  }
+  ctx.restore();
+}
+
 export function renderSimulation(
   ctx: CanvasRenderingContext2D,
   sim: SimulationState,
@@ -460,6 +499,7 @@ export function renderSimulation(
     }
     drawPlayer(ctx, sim, timeSec);
     drawParticles(ctx, sim);
+    drawGrazePopups(ctx, sim);
     drawWaveBanner(ctx, sim);
   }
 

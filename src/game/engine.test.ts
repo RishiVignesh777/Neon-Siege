@@ -6,8 +6,11 @@ import {
   DEATH_BEAT_SECONDS,
   ENEMY_TELEGRAPH_SECONDS,
   FIRE_COOLDOWN_SECONDS,
+  GRAZE_BONUS_POINTS,
   INVULNERABILITY_SECONDS,
   LOWER_ZONE_TOP_RATIO,
+  PLAYER_GRAZE_RADIUS,
+  PLAYER_HIT_RADIUS,
   PLAYER_RADIUS,
   PLAYER_SPEED,
 } from './constants';
@@ -148,59 +151,43 @@ test('player hit reduces lives, grants 1.4s invulnerability, and triggers gameov
   const sim = createInitialSimulation(0, 'playing');
   assert.equal(sim.lives, 3);
 
+  const pushHitBullet = (id: number) => {
+    sim.enemyBullets.push({
+      id,
+      x: sim.player.x,
+      y: sim.player.y,
+      vx: 0,
+      vy: 100,
+      radius: 5,
+      grazed: false,
+      inGrazeRing: false,
+      grazeX: sim.player.x,
+      grazeY: sim.player.y,
+      active: true,
+    });
+  };
+
   // Hit #1
-  sim.enemyBullets.push({
-    id: 1001,
-    x: sim.player.x,
-    y: sim.player.y,
-    vx: 0,
-    vy: 100,
-    radius: 5,
-    active: true,
-  });
+  pushHitBullet(1001);
   stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
   assert.equal(sim.lives, 2);
   assert.ok(sim.player.invulnTimer > 1.3 && sim.player.invulnTimer <= INVULNERABILITY_SECONDS);
 
   // Immediate second bullet while invulnerable should NOT deal damage
-  sim.enemyBullets.push({
-    id: 1002,
-    x: sim.player.x,
-    y: sim.player.y,
-    vx: 0,
-    vy: 100,
-    radius: 5,
-    active: true,
-  });
+  pushHitBullet(1002);
   stepSimulation(sim, emptyInput(), 0.05, () => 0.5);
   assert.equal(sim.lives, 2);
 
   // Expire invulnerability and take hits 2 and 3
   sim.player.invulnTimer = 0;
   sim.hitstopTimer = 0;
-  sim.enemyBullets.push({
-    id: 1003,
-    x: sim.player.x,
-    y: sim.player.y,
-    vx: 0,
-    vy: 100,
-    radius: 5,
-    active: true,
-  });
+  pushHitBullet(1003);
   stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
   assert.equal(sim.lives, 1);
 
   sim.player.invulnTimer = 0;
   sim.hitstopTimer = 0;
-  sim.enemyBullets.push({
-    id: 1004,
-    x: sim.player.x,
-    y: sim.player.y,
-    vx: 0,
-    vy: 100,
-    radius: 5,
-    active: true,
-  });
+  pushHitBullet(1004);
   stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
   assert.equal(sim.lives, 0);
   assert.equal(sim.phase, 'playing');
@@ -281,4 +268,63 @@ test('combo multiplier increments on kills within 1.5s, caps at x10, multiplies 
   }
   assert.equal(sim.multiplier, 1);
   assert.equal(sim.comboTimer, 0);
+});
+
+test('graze ring (26px vs 14px hit radius) awards +2 once on near miss and never on direct hit', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  assert.equal(PLAYER_HIT_RADIUS, 14);
+  assert.equal(PLAYER_GRAZE_RADIUS, 26);
+
+  // Near-miss bullet passing vertically at x = player.x + 22 (outside 14+4.5=18.5 hit, inside 26+4.5=30.5 graze)
+  sim.enemyBullets.push({
+    id: 3001,
+    x: sim.player.x + 22,
+    y: sim.player.y - 34,
+    vx: 0,
+    vy: 260,
+    radius: 4.5,
+    grazed: false,
+    inGrazeRing: false,
+    grazeX: sim.player.x + 22,
+    grazeY: sim.player.y - 34,
+    active: true,
+  });
+
+  // Step through graze ring entry -> inside -> clean exit (~0.32s total)
+  for (let i = 0; i < 16; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  }
+
+  assert.equal(sim.lives, 3);
+  assert.equal(sim.grazeScore, GRAZE_BONUS_POINTS);
+  assert.equal(sim.score, GRAZE_BONUS_POINTS);
+  assert.ok(sim.grazePopups.some((p) => p.active && p.amount === GRAZE_BONUS_POINTS));
+
+  // Continue advancing -> same bullet must NEVER award graze points a second time
+  for (let i = 0; i < 10; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  }
+  assert.equal(sim.grazeScore, GRAZE_BONUS_POINTS);
+
+  // Direct hit bullet passing straight into 14px hit radius must NOT award graze points
+  sim.enemyBullets.push({
+    id: 3002,
+    x: sim.player.x,
+    y: sim.player.y - 24,
+    vx: 0,
+    vy: 260,
+    radius: 4.5,
+    grazed: false,
+    inGrazeRing: false,
+    grazeX: sim.player.x,
+    grazeY: sim.player.y - 24,
+    active: true,
+  });
+
+  for (let i = 0; i < 10; i++) {
+    sim.hitstopTimer = 0;
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  }
+  assert.equal(sim.lives, 2);
+  assert.equal(sim.grazeScore, GRAZE_BONUS_POINTS);
 });
