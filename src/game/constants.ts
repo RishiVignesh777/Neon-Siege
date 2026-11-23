@@ -48,6 +48,8 @@ export const MAX_GRAZE_POPUPS = 24;
 export const MAX_DELTA_TIME = 0.05;
 
 export const BEST_SCORE_STORAGE_KEY = 'neon_siege_best_score';
+export const LEADERBOARD_STORAGE_KEY = 'neon_siege_leaderboard';
+export const MAX_LEADERBOARD_ENTRIES = 5;
 
 export const COLORS = {
   bg: '#05060b',

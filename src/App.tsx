@@ -18,6 +18,13 @@ import {
   spawnBoss,
   stepSimulation,
 } from './game/engine';
+import {
+  insertLeaderboardEntry,
+  loadLeaderboard,
+  qualifiesForLeaderboard,
+  saveLeaderboard,
+  type LeaderboardEntry,
+} from './game/leaderboard';
 import { renderSimulation } from './game/renderer';
 import type { GameSnapshot, InputState, SimulationState } from './game/types';
 
@@ -58,6 +65,11 @@ export default function App() {
 
   const [snapshot, setSnapshot] = useState<GameSnapshot>(() => getSnapshot(simRef.current));
   const [muted, setMuted] = useState<boolean>(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => loadLeaderboard());
+  const [needsInitials, setNeedsInitials] = useState<boolean>(false);
+  const [highlightRank, setHighlightRank] = useState<number | null>(null);
+  const needsInitialsRef = useRef<boolean>(false);
+  const handledGameOverRef = useRef<boolean>(false);
 
   const syncBodyState = useCallback((phase: GameSnapshot['phase']) => {
     if (document.body.dataset.state !== phase) {
@@ -139,10 +151,41 @@ export default function App() {
     setMuted(nextMuted);
   }, []);
 
+  const handleSubmitInitials = useCallback((rawInitials: string) => {
+    const score = simRef.current.score;
+    const current = loadLeaderboard();
+    const { entries, insertedIndex } = insertLeaderboardEntry(current, rawInitials, score);
+    saveLeaderboard(entries);
+    setLeaderboard(entries);
+    setHighlightRank(insertedIndex);
+    needsInitialsRef.current = false;
+    setNeedsInitials(false);
+  }, []);
+
   // Initialize body state attribute on mount
   useEffect(() => {
     syncBodyState(simRef.current.phase);
   }, [syncBodyState]);
+
+  // Check top-5 leaderboard qualification once on entering game over
+  useEffect(() => {
+    if (snapshot.phase === 'gameover') {
+      if (!handledGameOverRef.current) {
+        handledGameOverRef.current = true;
+        const current = loadLeaderboard();
+        setLeaderboard(current);
+        const qualifies = qualifiesForLeaderboard(snapshot.score, current);
+        needsInitialsRef.current = qualifies;
+        setNeedsInitials(qualifies);
+        setHighlightRank(null);
+      }
+    } else {
+      handledGameOverRef.current = false;
+      needsInitialsRef.current = false;
+      setNeedsInitials(false);
+      setHighlightRank(null);
+    }
+  }, [snapshot.phase, snapshot.score]);
 
   // Keyboard listener (WASD + Arrows + Space + P/Escape + M)
   useEffect(() => {
@@ -158,6 +201,11 @@ export default function App() {
       code === 'KeyD';
 
     const onKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName;
+      if (needsInitialsRef.current || activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+        return;
+      }
+
       if (isGameKey(e.code)) {
         e.preventDefault();
       }
@@ -322,7 +370,11 @@ export default function App() {
 
         {/* Start Screen */}
         {snapshot.phase === 'title' && (
-          <TitleOverlay bestScore={snapshot.bestScore} onStart={startNewRun} />
+          <TitleOverlay
+            bestScore={snapshot.bestScore}
+            leaderboard={leaderboard}
+            onStart={startNewRun}
+          />
         )}
 
         {/* Pause Modal */}
@@ -344,6 +396,10 @@ export default function App() {
             wave={snapshot.wave}
             elapsedSeconds={snapshot.elapsedSeconds}
             isNewBest={snapshot.isNewBest}
+            leaderboard={leaderboard}
+            highlightIndex={highlightRank}
+            needsInitials={needsInitials}
+            onSubmitInitials={handleSubmitInitials}
             onRetry={startNewRun}
             onQuitToTitle={quitToTitle}
           />
