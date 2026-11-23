@@ -316,12 +316,27 @@ function drawPlayer(ctx: CanvasRenderingContext2D, sim: SimulationState, timeSec
   ctx.restore();
 }
 
+function traceHexagonPath(ctx: CanvasRenderingContext2D, radius: number): void {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 3) * i - Math.PI / 2;
+    const vx = Math.cos(angle) * radius;
+    const vy = Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(vx, vy);
+    else ctx.lineTo(vx, vy);
+  }
+  ctx.closePath();
+}
+
 function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy): void {
   ctx.save();
   ctx.translate(e.x, e.y);
 
+  const hitFlash = e.hitFlashTimer > 0;
+
   // Soft magenta radial glow
-  ctx.fillStyle = e.isTelegraphing ? 'rgba(255, 30, 138, 0.24)' : 'rgba(255, 30, 138, 0.13)';
+  ctx.fillStyle =
+    hitFlash || e.isTelegraphing ? 'rgba(255, 30, 138, 0.24)' : 'rgba(255, 30, 138, 0.13)';
   ctx.beginPath();
   ctx.arc(0, 0, e.radius + 9, 0, Math.PI * 2);
   ctx.fill();
@@ -339,7 +354,54 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy): void {
 
   const r = e.radius;
 
-  // Outer glowing magenta diamond
+  if (e.kind === 'splitter') {
+    // Larger magenta hexagon hull
+    traceHexagonPath(ctx, r);
+    ctx.fillStyle = hitFlash ? '#5b103f' : e.isTelegraphing ? '#3d0b2b' : '#26061b';
+    ctx.fill();
+
+    // Multi-pass magenta neon outline
+    ctx.strokeStyle = hitFlash ? 'rgba(244, 251, 255, 0.42)' : 'rgba(255, 30, 138, 0.34)';
+    ctx.lineWidth = 7.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    ctx.strokeStyle = hitFlash || e.isTelegraphing ? COLORS.white : COLORS.magenta;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Inner counter-rotating hexagon ring
+    ctx.save();
+    ctx.rotate(e.spinAngle * 0.75);
+    traceHexagonPath(ctx, r * 0.56);
+    ctx.strokeStyle = hitFlash ? COLORS.white : COLORS.magentaSoft;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+
+    // Split seam / twin-core indicator (2 bright cores at 2 HP; cracked center seam at 1 HP)
+    if (e.hp >= 2) {
+      ctx.fillStyle = hitFlash ? COLORS.white : COLORS.magentaSoft;
+      ctx.beginPath();
+      ctx.arc(-5, 0, 2.5, 0, Math.PI * 2);
+      ctx.arc(5, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = hitFlash ? COLORS.white : '#ffd1ea';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.68);
+      ctx.lineTo(-2.5, -r * 0.18);
+      ctx.lineTo(2.5, r * 0.18);
+      ctx.lineTo(0, r * 0.68);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+    return;
+  }
+
+  // Regular glowing magenta diamond
   ctx.beginPath();
   ctx.moveTo(0, -r);
   ctx.lineTo(r * 0.88, 0);
@@ -382,18 +444,6 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy): void {
   ctx.fill();
 
   ctx.restore();
-}
-
-function traceHexagonPath(ctx: CanvasRenderingContext2D, radius: number): void {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i - Math.PI / 2;
-    const vx = Math.cos(angle) * radius;
-    const vy = Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(vx, vy);
-    else ctx.lineTo(vx, vy);
-  }
-  ctx.closePath();
 }
 
 function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss): void {

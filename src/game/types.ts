@@ -41,8 +41,13 @@ export interface PlayerBullet {
   active: boolean;
 }
 
+export type EnemyKind = 'regular' | 'splitter';
+
 export interface Enemy {
   id: number;
+  kind: EnemyKind;
+  hp: number;
+  maxHp: number;
   x: number;
   y: number;
   vx: number;

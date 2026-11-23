@@ -22,6 +22,14 @@ export const INVULNERABILITY_SECONDS = 1.4;
 export const DEATH_BEAT_SECONDS = 0.48;
 
 export const ENEMY_RADIUS = 17;
+export const SPLITTER_RADIUS = 24;
+export const SPLITTER_CHILD_RADIUS = 13;
+export const SPLITTER_HP = 2;
+export const SPLITTER_MIN_WAVE = 4;
+export const SPLITTER_BASE_SPAWN_CHANCE = 0.2;
+export const SPLITTER_WAVE_SPAWN_STEP = 0.025;
+export const SPLITTER_MAX_SPAWN_CHANCE = 0.38;
+export const SPLITTER_CHILD_POP_SPEED = 195;
 export const ENEMY_BULLET_RADIUS = 4.5;
 export const ENEMY_TELEGRAPH_SECONDS = 0.28;
 

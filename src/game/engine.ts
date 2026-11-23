@@ -39,6 +39,14 @@ import {
   POWERUP_DURATION_SECONDS,
   POWERUP_FALL_SPEED,
   POWERUP_RADIUS,
+  SPLITTER_BASE_SPAWN_CHANCE,
+  SPLITTER_CHILD_POP_SPEED,
+  SPLITTER_CHILD_RADIUS,
+  SPLITTER_HP,
+  SPLITTER_MAX_SPAWN_CHANCE,
+  SPLITTER_MIN_WAVE,
+  SPLITTER_RADIUS,
+  SPLITTER_WAVE_SPAWN_STEP,
   TIME_BONUS_POINTS_PER_SECOND,
   WAVE_DURATION_SECONDS,
 } from './constants';
@@ -46,6 +54,7 @@ import type {
   Boss,
   DifficultyParams,
   Enemy,
+  EnemyKind,
   GameSnapshot,
   GrazePopup,
   InputState,
@@ -265,20 +274,40 @@ export function spawnParticles(
   }
 }
 
-export function spawnEnemy(sim: SimulationState, rng: () => number = Math.random): Enemy {
+export function getSplitterSpawnChance(wave: number): number {
+  if (wave < SPLITTER_MIN_WAVE) return 0;
+  return Math.min(
+    SPLITTER_MAX_SPAWN_CHANCE,
+    SPLITTER_BASE_SPAWN_CHANCE + (wave - SPLITTER_MIN_WAVE) * SPLITTER_WAVE_SPAWN_STEP
+  );
+}
+
+export function spawnEnemy(
+  sim: SimulationState,
+  rng: () => number = Math.random,
+  forcedKind?: EnemyKind
+): Enemy {
   const diff = getDifficultyParams(sim.elapsedSeconds);
-  const margin = ENEMY_RADIUS + 26;
+  const kind: EnemyKind =
+    forcedKind ?? (rng() < getSplitterSpawnChance(sim.wave) ? 'splitter' : 'regular');
+  const isSplitter = kind === 'splitter';
+  const radius = isSplitter ? SPLITTER_RADIUS : ENEMY_RADIUS;
+  const hp = isSplitter ? SPLITTER_HP : 1;
+  const margin = radius + 26;
   const x = margin + rng() * (sim.width - margin * 2);
   const speedVariance = 0.88 + rng() * 0.28;
   const weaveAmp = sim.wave >= 2 ? (rng() < 0.55 ? 24 + rng() * 28 : 0) : 0;
 
   const enemy: Enemy = {
     id: sim.nextEntityId++,
+    kind,
+    hp,
+    maxHp: hp,
     x,
-    y: -ENEMY_RADIUS - 4,
+    y: -radius - 4,
     vx: 0,
-    vy: diff.enemySpeed * speedVariance,
-    radius: ENEMY_RADIUS,
+    vy: diff.enemySpeed * speedVariance * (isSplitter ? 0.88 : 1),
+    radius,
     weaveAmp,
     weaveFreq: 1.4 + rng() * 1.4,
     weavePhase: rng() * Math.PI * 2,
@@ -292,6 +321,44 @@ export function spawnEnemy(sim: SimulationState, rng: () => number = Math.random
 
   sim.enemies.push(enemy);
   return enemy;
+}
+
+function spawnSplitterChildren(
+  sim: SimulationState,
+  parent: Enemy,
+  diff: DifficultyParams,
+  rng: () => number
+): void {
+  const radius = SPLITTER_CHILD_RADIUS;
+  const margin = radius + 12;
+  const directions = [-1, 1];
+
+  for (let i = 0; i < directions.length; i++) {
+    const dir = directions[i];
+    const x = Math.max(margin, Math.min(sim.width - margin, parent.x + dir * 12));
+    const speedVariance = 0.94 + rng() * 0.2;
+    const child: Enemy = {
+      id: sim.nextEntityId++,
+      kind: 'regular',
+      hp: 1,
+      maxHp: 1,
+      x,
+      y: parent.y,
+      vx: dir * SPLITTER_CHILD_POP_SPEED,
+      vy: diff.enemySpeed * speedVariance,
+      radius,
+      weaveAmp: sim.wave >= 2 ? 20 + rng() * 20 : 0,
+      weaveFreq: 1.6 + rng() * 1.2,
+      weavePhase: rng() * Math.PI * 2,
+      fireTimer: diff.enemyFireInterval * (0.55 + rng() * 0.55),
+      telegraphTimer: 0,
+      isTelegraphing: false,
+      hitFlashTimer: 0,
+      spinAngle: 0,
+      active: true,
+    };
+    sim.enemies.push(child);
+  }
 }
 
 export function spawnBoss(sim: SimulationState): Boss {
@@ -625,10 +692,21 @@ export function stepSimulation(
     }
 
     const weaveVx = e.weaveAmp > 0 ? Math.cos(sim.elapsedSeconds * e.weaveFreq + e.weavePhase) * e.weaveAmp : 0;
-    e.x += weaveVx * dt;
+    if (Math.abs(e.vx) > 0.5) {
+      e.vx *= Math.pow(0.015, dt);
+    } else {
+      e.vx = 0;
+    }
+    e.x += (e.vx + weaveVx) * dt;
     const margin = e.radius + 12;
-    if (e.x < margin) e.x = margin;
-    if (e.x > sim.width - margin) e.x = sim.width - margin;
+    if (e.x < margin) {
+      e.x = margin;
+      if (e.vx < 0) e.vx = 0;
+    }
+    if (e.x > sim.width - margin) {
+      e.x = sim.width - margin;
+      if (e.vx > 0) e.vx = 0;
+    }
 
     e.y += e.vy * dt;
 
@@ -796,6 +874,24 @@ export function stepSimulation(
 
       if (circlesOverlap(b.x, b.y, b.radius, e.x, e.y, e.radius)) {
         b.active = false;
+        e.hp = Math.max(0, e.hp - 1);
+
+        if (e.hp > 0) {
+          e.hitFlashTimer = 0.1;
+          spawnParticles(
+            sim,
+            b.x,
+            b.y,
+            5,
+            [COLORS.magentaSoft, COLORS.white],
+            40,
+            150,
+            rng,
+            false
+          );
+          break;
+        }
+
         e.active = false;
         sim.kills += 1;
         if (sim.comboTimer > 0) {
@@ -825,6 +921,9 @@ export function stepSimulation(
           rng,
           true
         );
+        if (e.kind === 'splitter') {
+          spawnSplitterChildren(sim, e, diff, rng);
+        }
         sim.pendingEvents.push('enemyDestroy');
         break;
       }

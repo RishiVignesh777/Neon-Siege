@@ -23,6 +23,10 @@ import {
   PLAYER_SPREAD_ANGLE_RAD,
   POWERUP_DURATION_SECONDS,
   POWERUP_FALL_SPEED,
+  SPLITTER_BASE_SPAWN_CHANCE,
+  SPLITTER_CHILD_RADIUS,
+  SPLITTER_HP,
+  SPLITTER_RADIUS,
   WAVE_DURATION_SECONDS,
 } from './constants';
 import {
@@ -33,6 +37,7 @@ import {
   getKillPoints,
   getLowerZoneMinY,
   getSnapshot,
+  getSplitterSpawnChance,
   getWaveFromTime,
   spawnBoss,
   spawnEnemy,
@@ -733,6 +738,106 @@ test('impact feedback: enemy kill triggers single-frame hitstop and subtle ~100m
   }
   assert.equal(getCameraShakeAmplitude(sim.trauma), 0, 'player hit shake settles cleanly');
 });
+
+test('splitter enemy introduces at wave 4 with low spawn chance increasing in later waves', () => {
+  assert.equal(getSplitterSpawnChance(1), 0);
+  assert.equal(getSplitterSpawnChance(2), 0);
+  assert.equal(getSplitterSpawnChance(3), 0);
+  assert.equal(getSplitterSpawnChance(4), SPLITTER_BASE_SPAWN_CHANCE);
+  assert.ok(getSplitterSpawnChance(6) > getSplitterSpawnChance(4));
+  assert.ok(getSplitterSpawnChance(10) > getSplitterSpawnChance(6));
+
+  const sim = createInitialSimulation(0, 'playing');
+  sim.wave = 3;
+  assert.equal(spawnEnemy(sim, () => 0.01).kind, 'regular', 'no splitters before wave 4');
+
+  sim.wave = 4;
+  sim.elapsedSeconds = WAVE_DURATION_SECONDS * 3;
+  assert.equal(spawnEnemy(sim, () => 0.1).kind, 'splitter', 'low rng spawns splitter at wave 4');
+  assert.equal(spawnEnemy(sim, () => 0.5).kind, 'regular', 'most wave 4 spawns remain regular');
+});
+
+test('splitter has 2 HP and splits into 2 smaller regular enemies that pop outward and behave normally', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  sim.wave = 4;
+  sim.elapsedSeconds = WAVE_DURATION_SECONDS * 3;
+  sim.waveProgressSeconds = WAVE_DURATION_SECONDS * 3;
+
+  const splitter = spawnEnemy(sim, () => 0.5, 'splitter');
+  assert.equal(splitter.kind, 'splitter');
+  assert.equal(splitter.hp, SPLITTER_HP);
+  assert.equal(splitter.radius, SPLITTER_RADIUS);
+  assert.ok(splitter.radius > ENEMY_RADIUS, 'splitter should be visually larger than regular enemy');
+
+  splitter.x = 450;
+  splitter.y = 220;
+
+  // Hit 1 -> reduces HP from 2 to 1, keeps splitter alive, no kill score yet
+  sim.playerBullets.push({
+    id: 9001,
+    x: 450,
+    y: 225,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  assert.equal(sim.enemies.length, 1);
+  assert.equal(sim.enemies[0].hp, 1);
+  assert.ok(sim.enemies[0].hitFlashTimer > 0);
+  assert.equal(sim.kills, 0);
+  assert.equal(sim.killScore, 0);
+
+  // Hit 2 -> destroys splitter, awards standard wave-scaled kill points, spawns 2 smaller regular enemies
+  sim.playerBullets.push({
+    id: 9002,
+    x: splitter.x,
+    y: splitter.y + 4,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+
+  assert.equal(sim.kills, 1);
+  assert.equal(sim.killScore, getKillPoints(4, 1));
+  assert.equal(sim.enemies.length, 2, 'destroyed splitter spawns 2 child enemies');
+
+  const [leftChild, rightChild] = [...sim.enemies].sort((a, b) => a.x - b.x);
+  assert.equal(leftChild.kind, 'regular');
+  assert.equal(rightChild.kind, 'regular');
+  assert.equal(leftChild.hp, 1);
+  assert.equal(rightChild.hp, 1);
+  assert.equal(leftChild.radius, SPLITTER_CHILD_RADIUS);
+  assert.ok(leftChild.radius < ENEMY_RADIUS, 'split children should be smaller than normal regular enemies');
+  assert.ok(leftChild.vx < 0 && rightChild.vx > 0, 'children pop outward in opposite directions');
+
+  // Clear hitstop and advance frames -> children pop outward horizontally and drift downward
+  const leftStartX = leftChild.x;
+  const rightStartX = rightChild.x;
+  const startY = leftChild.y;
+  sim.hitstopTimer = 0;
+  for (let i = 0; i < 10; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  }
+  assert.ok(leftChild.x < leftStartX - 10, 'left child popped outward to the left');
+  assert.ok(rightChild.x > rightStartX + 10, 'right child popped outward to the right');
+  assert.ok(leftChild.y > startY && rightChild.y > startY, 'children drift downward normally');
+
+  // Verify split child continues normal aimed firing behavior toward the player
+  leftChild.fireTimer = 0.01;
+  rightChild.fireTimer = 10;
+  stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  assert.equal(leftChild.isTelegraphing, true);
+
+  for (let i = 0; i < 16 && sim.enemyBullets.length === 0; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5);
+  }
+  assert.ok(sim.enemyBullets.length >= 1, 'split child fires aimed bullet back at player');
+});
+
 
 
 
