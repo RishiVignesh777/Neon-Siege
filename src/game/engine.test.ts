@@ -39,6 +39,7 @@ import {
   spawnPowerUp,
   stepSimulation,
 } from './engine';
+import { getCameraShakeAmplitude } from './renderer';
 import type { InputState } from './types';
 
 function emptyInput(overrides: Partial<InputState> = {}): InputState {
@@ -662,5 +663,76 @@ test('power-up HUD snapshot exposes activePowerUp and timed countdowns accuratel
   assert.equal(snap.activePowerUp, 'spread_shot');
   assert.equal(snap.powerUpSeconds, 10);
 });
+
+test('impact feedback: enemy kill triggers single-frame hitstop and subtle ~100ms shake; player hit uses stronger longer shake', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  const enemy = spawnEnemy(sim, () => 0.5);
+  enemy.x = 450;
+  enemy.y = 320;
+
+  sim.playerBullets.push({
+    id: 8001,
+    x: 450,
+    y: 325,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+
+  // Kill enemy
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  const killShake = getCameraShakeAmplitude(sim.trauma);
+  assert.ok(killShake >= 2.5 && killShake <= 5, `expected subtle kill shake (2.5..5px), got ${killShake}`);
+  assert.ok(sim.hitstopTimer > 0 && sim.hitstopTimer <= 0.016, 'expected single-frame hitstop');
+
+  // Next frame (60fps ~16ms) freezes player movement (hit-stop) while trauma decays slightly
+  const frozenPlayerX = sim.player.x;
+  const frozenElapsed = sim.elapsedSeconds;
+  stepSimulation(sim, emptyInput({ right: true }), 0.016, () => 0.5);
+  assert.equal(sim.player.x, frozenPlayerX, 'player stays frozen during single-frame hit-stop');
+  assert.equal(sim.elapsedSeconds, frozenElapsed, 'simulation clock freezes during hit-stop');
+  assert.equal(sim.hitstopTimer, 0, 'hit-stop clears after a single frame');
+
+  // Following frame resumes normal movement immediately
+  stepSimulation(sim, emptyInput({ right: true }), 0.016, () => 0.5);
+  assert.ok(sim.player.x > frozenPlayerX, 'player resumes moving on frame after hit-stop');
+
+  // After ~110ms total from kill, kill shake has decayed back to 0
+  for (let i = 0; i < 6; i++) {
+    stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  }
+  assert.equal(getCameraShakeAmplitude(sim.trauma), 0, 'kill shake ends cleanly around ~100ms');
+
+  // Player taking a hit triggers stronger and longer shake than an enemy kill
+  sim.enemies.length = 0;
+  sim.enemyBullets.push({
+    id: 8002,
+    x: sim.player.x,
+    y: sim.player.y,
+    vx: 0,
+    vy: 150,
+    radius: 4.5,
+    grazed: false,
+    inGrazeRing: false,
+    grazeX: sim.player.x,
+    grazeY: sim.player.y,
+    active: true,
+  });
+  stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  const hitShake = getCameraShakeAmplitude(sim.trauma);
+  assert.ok(hitShake > killShake + 2, `expected player hit shake (${hitShake}) > kill shake (${killShake})`);
+
+  // At ~120ms after player hit, shake is still active (> kill duration), then settles by ~250ms
+  for (let i = 0; i < 7; i++) {
+    stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  }
+  assert.ok(getCameraShakeAmplitude(sim.trauma) > 0, 'player hit shake lasts longer than kill shake');
+  for (let i = 0; i < 10; i++) {
+    stepSimulation(sim, emptyInput(), 0.016, () => 0.5);
+  }
+  assert.equal(getCameraShakeAmplitude(sim.trauma), 0, 'player hit shake settles cleanly');
+});
+
 
 

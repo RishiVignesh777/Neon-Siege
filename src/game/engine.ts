@@ -383,7 +383,7 @@ function updateGrazePopups(sim: SimulationState, dt: number): void {
 function triggerPlayerDamage(sim: SimulationState, rng: () => number): void {
   sim.lives = Math.max(0, sim.lives - 1);
   sim.hitstopTimer = 0.055;
-  sim.trauma = Math.min(1, sim.trauma + 0.78);
+  sim.trauma = Math.min(1, Math.max(sim.trauma, 0.85));
   sim.player.squashX = 1.32;
   sim.player.squashY = 0.72;
 
@@ -441,7 +441,7 @@ export function stepSimulation(
   }
 
   // Always tick camera trauma decay and particles even during hitstop/death beat
-  sim.trauma = Math.max(0, sim.trauma - dt * 2.1);
+  sim.trauma = Math.max(0, sim.trauma - dt * 3.8);
 
   if (sim.phase !== 'playing') {
     if (sim.phase === 'gameover') {
@@ -751,7 +751,7 @@ export function stepSimulation(
         sim.boss = null;
 
         sim.hitstopTimer = Math.max(sim.hitstopTimer, 0.045);
-        sim.trauma = Math.min(1, sim.trauma + 0.35);
+        sim.trauma = Math.min(1, Math.max(sim.trauma, 0.58));
         spawnParticles(
           sim,
           bx,
@@ -812,8 +812,8 @@ export function stepSimulation(
           saveBestScore(sim.bestScore);
         }
 
-        sim.hitstopTimer = Math.max(sim.hitstopTimer, 0.025);
-        sim.trauma = Math.min(1, sim.trauma + 0.18);
+        sim.hitstopTimer = Math.max(sim.hitstopTimer, 0.014);
+        sim.trauma = Math.min(0.5, Math.max(sim.trauma, 0.40));
         spawnParticles(
           sim,
           e.x,
@@ -919,7 +919,7 @@ export function stepSimulation(
         sim.powerUpTimer = 0;
         sim.player.invulnTimer = INVULNERABILITY_SECONDS;
         sim.hitstopTimer = 0.04;
-        sim.trauma = Math.min(1, sim.trauma + 0.35);
+        sim.trauma = Math.min(1, Math.max(sim.trauma, 0.52));
         spawnParticles(
           sim,
           sim.player.x,

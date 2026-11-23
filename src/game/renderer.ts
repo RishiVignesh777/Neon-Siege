@@ -660,6 +660,10 @@ function drawGrazePopups(ctx: CanvasRenderingContext2D, sim: SimulationState): v
   ctx.restore();
 }
 
+export function getCameraShakeAmplitude(trauma: number): number {
+  return trauma > 0.005 ? trauma * 9.5 : 0;
+}
+
 export function renderSimulation(
   ctx: CanvasRenderingContext2D,
   sim: SimulationState,
@@ -668,9 +672,11 @@ export function renderSimulation(
 ): void {
   ctx.save();
 
-  // Apply decaying camera trauma shake
-  if (sim.trauma > 0.005) {
-    const shake = sim.trauma * sim.trauma * 9;
+  // Apply decaying camera trauma shake across the whole canvas view
+  const shake = getCameraShakeAmplitude(sim.trauma);
+  if (shake > 0) {
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(0, 0, sim.width, sim.height);
     const ox = (rng() * 2 - 1) * shake;
     const oy = (rng() * 2 - 1) * shake;
     ctx.translate(ox, oy);
