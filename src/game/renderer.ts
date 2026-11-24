@@ -714,6 +714,46 @@ export function getCameraShakeAmplitude(trauma: number): number {
   return trauma > 0.005 ? trauma * 9.5 : 0;
 }
 
+export function getLowLifeVignetteAlpha(
+  lives: number,
+  phase: SimulationState['phase'],
+  dyingTimer: number,
+  timeSec: number
+): number {
+  if (phase !== 'playing' || lives !== 1 || dyingTimer > 0) {
+    return 0;
+  }
+  const pulse = 0.5 - 0.5 * Math.cos(timeSec * Math.PI * 2);
+  return 0.06 + pulse * 0.28;
+}
+
+function drawLowLifeVignette(
+  ctx: CanvasRenderingContext2D,
+  sim: SimulationState,
+  timeSec: number
+): void {
+  const alpha = getLowLifeVignetteAlpha(sim.lives, sim.phase, sim.dyingTimer, timeSec);
+  if (alpha <= 0) return;
+
+  const cx = sim.width * 0.5;
+  const cy = sim.height * 0.5;
+  const innerR = Math.min(sim.width, sim.height) * 0.34;
+  const outerR = Math.hypot(cx, cy);
+
+  ctx.save();
+  const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+  grad.addColorStop(0, 'rgba(255, 24, 58, 0)');
+  grad.addColorStop(0.62, `rgba(255, 24, 58, ${(alpha * 0.32).toFixed(3)})`);
+  grad.addColorStop(1, `rgba(255, 24, 58, ${alpha.toFixed(3)})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, sim.width, sim.height);
+
+  ctx.strokeStyle = `rgba(255, 44, 78, ${(alpha * 0.72).toFixed(3)})`;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, sim.width - 4, sim.height - 4);
+  ctx.restore();
+}
+
 export function renderSimulation(
   ctx: CanvasRenderingContext2D,
   sim: SimulationState,
@@ -754,4 +794,6 @@ export function renderSimulation(
   }
 
   ctx.restore();
+
+  drawLowLifeVignette(ctx, sim, timeSec);
 }

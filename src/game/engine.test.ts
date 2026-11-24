@@ -44,7 +44,7 @@ import {
   spawnPowerUp,
   stepSimulation,
 } from './engine';
-import { getCameraShakeAmplitude } from './renderer';
+import { getCameraShakeAmplitude, getLowLifeVignetteAlpha } from './renderer';
 import type { InputState } from './types';
 
 function emptyInput(overrides: Partial<InputState> = {}): InputState {
@@ -837,6 +837,30 @@ test('splitter has 2 HP and splits into 2 smaller regular enemies that pop outwa
   }
   assert.ok(sim.enemyBullets.length >= 1, 'split child fires aimed bullet back at player');
 });
+
+test('low-life warning pulses subtly on a ~1s cycle at 1 life and stops on life gain or game over', () => {
+  // Inactive above 1 life
+  assert.equal(getLowLifeVignetteAlpha(3, 'playing', 0, 0.5), 0);
+  assert.equal(getLowLifeVignetteAlpha(2, 'playing', 0, 0.5), 0);
+
+  // Active and pulsing smoothly on a 1.0s cycle when down to last life
+  const t0 = getLowLifeVignetteAlpha(1, 'playing', 0, 0.0);
+  const tQuarter = getLowLifeVignetteAlpha(1, 'playing', 0, 0.25);
+  const tPeak = getLowLifeVignetteAlpha(1, 'playing', 0, 0.5);
+  const tCycleEnd = getLowLifeVignetteAlpha(1, 'playing', 0, 1.0);
+
+  assert.ok(t0 > 0 && t0 < tQuarter && tQuarter < tPeak, 'vignette fades in smoothly over 0..0.5s');
+  assert.ok(tPeak > 0.2 && tPeak <= 0.4, `vignette peak should stay subtle, got ${tPeak}`);
+  assert.ok(Math.abs(tCycleEnd - t0) < 0.0001, 'pulse completes a 1-second cycle');
+
+  // Stops immediately when gaining a life back, entering death beat, or reaching game over
+  assert.equal(getLowLifeVignetteAlpha(2, 'playing', 0, 0.5), 0);
+  assert.equal(getLowLifeVignetteAlpha(1, 'playing', 0.2, 0.5), 0);
+  assert.equal(getLowLifeVignetteAlpha(0, 'playing', 0, 0.5), 0);
+  assert.equal(getLowLifeVignetteAlpha(1, 'gameover', 0, 0.5), 0);
+  assert.equal(getLowLifeVignetteAlpha(0, 'gameover', 0, 0.5), 0);
+});
+
 
 
 
