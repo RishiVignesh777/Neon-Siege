@@ -27,6 +27,7 @@ import {
   SPLITTER_CHILD_RADIUS,
   SPLITTER_HP,
   SPLITTER_RADIUS,
+  WAVE_BANNER_DURATION_SECONDS,
   WAVE_DURATION_SECONDS,
 } from './constants';
 import {
@@ -44,7 +45,11 @@ import {
   spawnPowerUp,
   stepSimulation,
 } from './engine';
-import { getCameraShakeAmplitude, getLowLifeVignetteAlpha } from './renderer';
+import {
+  getCameraShakeAmplitude,
+  getLowLifeVignetteAlpha,
+  getWaveBannerOpacity,
+} from './renderer';
 import type { InputState } from './types';
 
 function emptyInput(overrides: Partial<InputState> = {}): InputState {
@@ -860,6 +865,45 @@ test('low-life warning pulses subtly on a ~1s cycle at 1 life and stops on life 
   assert.equal(getLowLifeVignetteAlpha(1, 'gameover', 0, 0.5), 0);
   assert.equal(getLowLifeVignetteAlpha(0, 'gameover', 0, 0.5), 0);
 });
+
+test('wave announcement triggers ~1.5s fading banner on wave increase without pausing gameplay', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  sim.elapsedSeconds = WAVE_DURATION_SECONDS - 0.01;
+  sim.waveProgressSeconds = WAVE_DURATION_SECONDS - 0.01;
+  const enemy = spawnEnemy(sim, () => 0.5, 'regular');
+  enemy.y = 120;
+
+  // Cross wave 1 -> wave 2 threshold
+  stepSimulation(sim, emptyInput({ right: true }), 0.02, () => 0.5);
+  assert.equal(sim.wave, 2);
+  assert.equal(sim.waveBannerTimer, WAVE_BANNER_DURATION_SECONDS);
+  assert.equal(WAVE_BANNER_DURATION_SECONDS, 1.5);
+
+  // Banner fades in over initial frames and peaks in the middle, while enemies & player continue moving normally
+  const enemyYAtWaveStart = enemy.y;
+  const playerXAtWaveStart = sim.player.x;
+  for (let i = 0; i < 12; i++) {
+    stepSimulation(sim, emptyInput({ right: true }), 0.02, () => 0.5); // +0.24s
+  }
+  assert.ok(sim.waveBannerTimer > 1.2 && sim.waveBannerTimer < 1.3);
+  assert.equal(getWaveBannerOpacity(sim.waveBannerTimer, sim.phase), 1);
+  assert.ok(enemy.y > enemyYAtWaveStart, 'enemies keep moving underneath wave banner');
+  assert.ok(sim.player.x > playerXAtWaveStart, 'player keeps moving normally during wave banner');
+
+  // Advance toward end of 1.5s -> banner fades out smoothly and clears to 0
+  for (let i = 0; i < 55; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5); // +1.10s (total 1.34s elapsed)
+  }
+  const fadingOpacity = getWaveBannerOpacity(sim.waveBannerTimer, sim.phase);
+  assert.ok(fadingOpacity > 0 && fadingOpacity < 1, `expected fading opacity, got ${fadingOpacity}`);
+
+  for (let i = 0; i < 12; i++) {
+    stepSimulation(sim, emptyInput(), 0.02, () => 0.5); // past 1.5s
+  }
+  assert.equal(sim.waveBannerTimer, 0);
+  assert.equal(getWaveBannerOpacity(sim.waveBannerTimer, sim.phase), 0);
+});
+
 
 
 

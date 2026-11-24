@@ -6,6 +6,7 @@ import {
   LOWER_ZONE_TOP_RATIO,
   MAX_GRAZE_POPUPS,
   MAX_PARTICLES,
+  WAVE_BANNER_DURATION_SECONDS,
 } from './constants';
 import type { Boss, Enemy, PowerUpPickup, SimulationState } from './types';
 
@@ -672,21 +673,47 @@ function drawParticles(ctx: CanvasRenderingContext2D, sim: SimulationState): voi
   ctx.restore();
 }
 
+export function getWaveBannerOpacity(
+  waveBannerTimer: number,
+  phase: SimulationState['phase']
+): number {
+  if (phase !== 'playing' || waveBannerTimer <= 0) return 0;
+  const elapsed = WAVE_BANNER_DURATION_SECONDS - waveBannerTimer;
+  const fadeIn = Math.min(1, Math.max(0, elapsed / 0.18));
+  const fadeOut = Math.min(1, Math.max(0, waveBannerTimer / 0.45));
+  return Math.min(fadeIn, fadeOut);
+}
+
 function drawWaveBanner(ctx: CanvasRenderingContext2D, sim: SimulationState): void {
-  if (sim.waveBannerTimer <= 0 || sim.phase !== 'playing') return;
-  const alpha = Math.min(1, sim.waveBannerTimer / 0.45) * Math.min(1, (1.65 - sim.waveBannerTimer) / 0.2);
+  const alpha = getWaveBannerOpacity(sim.waveBannerTimer, sim.phase);
   if (alpha <= 0.01) return;
+
+  const label = `WAVE ${sim.wave}`;
+  const cx = sim.width * 0.5;
+  const cy = sim.height * 0.48;
 
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '700 22px "Chakra Petch", sans-serif';
-  ctx.strokeStyle = 'rgba(0, 245, 255, 0.38)';
-  ctx.lineWidth = 4;
-  ctx.strokeText(`WAVE ${String(sim.wave).padStart(2, '0')}`, sim.width / 2, sim.height * 0.24);
-  ctx.fillStyle = COLORS.cyanSoft;
-  ctx.fillText(`WAVE ${String(sim.wave).padStart(2, '0')}`, sim.width / 2, sim.height * 0.24);
+  ctx.font = '700 54px "Chakra Petch", sans-serif';
+  ctx.lineJoin = 'round';
+
+  // Multi-pass cyan neon glow matching HUD typography
+  ctx.strokeStyle = 'rgba(0, 245, 255, 0.22)';
+  ctx.lineWidth = 14;
+  ctx.strokeText(label, cx, cy);
+
+  ctx.strokeStyle = 'rgba(0, 245, 255, 0.48)';
+  ctx.lineWidth = 6;
+  ctx.strokeText(label, cx, cy);
+
+  ctx.strokeStyle = 'rgba(5, 6, 11, 0.85)';
+  ctx.lineWidth = 3;
+  ctx.strokeText(label, cx, cy);
+
+  ctx.fillStyle = COLORS.cyan;
+  ctx.fillText(label, cx, cy);
   ctx.restore();
 }
 

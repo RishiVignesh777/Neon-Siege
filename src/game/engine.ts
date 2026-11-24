@@ -48,6 +48,7 @@ import {
   SPLITTER_RADIUS,
   SPLITTER_WAVE_SPAWN_STEP,
   TIME_BONUS_POINTS_PER_SECOND,
+  WAVE_BANNER_DURATION_SECONDS,
   WAVE_DURATION_SECONDS,
 } from './constants';
 import type {
@@ -562,7 +563,7 @@ export function stepSimulation(
   const nextWave = getWaveFromTime(sim.waveProgressSeconds);
   if (nextWave > sim.wave) {
     sim.wave = nextWave;
-    sim.waveBannerTimer = 1.65;
+    sim.waveBannerTimer = WAVE_BANNER_DURATION_SECONDS;
     sim.pendingEvents.push('waveUp');
     if (sim.wave % BOSS_WAVE_INTERVAL === 0 && !sim.boss) {
       spawnBoss(sim);
@@ -849,7 +850,7 @@ export function stepSimulation(
         // Resume normal enemy spawning for the next wave
         sim.wave += 1;
         sim.waveProgressSeconds = (sim.wave - 1) * WAVE_DURATION_SECONDS;
-        sim.waveBannerTimer = 1.65;
+        sim.waveBannerTimer = WAVE_BANNER_DURATION_SECONDS;
         sim.pendingEvents.push('waveUp');
         sim.spawnTimer = 0.45;
       } else {
