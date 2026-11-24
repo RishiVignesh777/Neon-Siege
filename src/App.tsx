@@ -127,7 +127,7 @@ export default function App() {
 
   const togglePause = useCallback(() => {
     const sim = simRef.current;
-    if (sim.phase === 'playing') {
+    if (sim.phase === 'playing' && sim.dyingTimer <= 0) {
       sim.phase = 'paused';
       clearInputs();
       syncSnapshotIfChanged(sim, true);
@@ -289,6 +289,7 @@ export default function App() {
 
     let rafId = 0;
     let lastTime = performance.now();
+    let renderTimeSec = lastTime / 1000;
 
     const frame = (now: number) => {
       const rawDt = (now - lastTime) / 1000;
@@ -317,7 +318,11 @@ export default function App() {
       // Sync React HUD only when discrete values change
       syncSnapshotIfChanged(sim);
 
-      renderSimulation(ctx, sim, now / 1000);
+      if (sim.phase !== 'paused') {
+        renderTimeSec += Math.max(0, Math.min(rawDt, 0.05));
+      }
+
+      renderSimulation(ctx, sim, renderTimeSec);
       rafId = window.requestAnimationFrame(frame);
     };
 

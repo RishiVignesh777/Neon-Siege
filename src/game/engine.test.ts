@@ -904,6 +904,64 @@ test('wave announcement triggers ~1.5s fading banner on wave increase without pa
   assert.equal(getWaveBannerOpacity(sim.waveBannerTimer, sim.phase), 0);
 });
 
+test('pausing freezes all movement, spawning, and elapsed survival timer, and resuming continues cleanly', () => {
+  const sim = createInitialSimulation(0, 'playing');
+  const enemy = spawnEnemy(sim, () => 0.5, 'regular');
+  enemy.x = 320;
+  enemy.y = 140;
+
+  sim.playerBullets.push({
+    id: 9501,
+    x: 450,
+    y: 420,
+    vx: 0,
+    vy: -800,
+    radius: 4,
+    active: true,
+  });
+
+  // Step once in playing state
+  stepSimulation(sim, emptyInput({ right: true }), 0.02, () => 0.5);
+
+  // Snapshot all live state before pausing
+  const pausedPlayerX = sim.player.x;
+  const pausedEnemyY = enemy.y;
+  const pausedBulletY = sim.playerBullets[0].y;
+  const pausedElapsed = sim.elapsedSeconds;
+  const pausedSpawnTimer = sim.spawnTimer;
+  const pausedScore = sim.score;
+  const pausedEnemyCount = sim.enemies.length;
+
+  // Pause and advance many frames with movement + fire inputs held
+  sim.phase = 'paused';
+  for (let i = 0; i < 60; i++) {
+    stepSimulation(
+      sim,
+      emptyInput({ right: true, up: true, fireHeld: true, fireJustPressed: true }),
+      0.05,
+      () => 0.5
+    );
+  }
+
+  assert.equal(sim.player.x, pausedPlayerX, 'player stays frozen while paused');
+  assert.equal(enemy.y, pausedEnemyY, 'enemy stays frozen while paused');
+  assert.equal(sim.playerBullets[0].y, pausedBulletY, 'bullets stay frozen while paused');
+  assert.equal(sim.elapsedSeconds, pausedElapsed, 'elapsed survival timer freezes while paused');
+  assert.equal(sim.spawnTimer, pausedSpawnTimer, 'spawn timer freezes while paused');
+  assert.equal(sim.enemies.length, pausedEnemyCount, 'no enemies spawn while paused');
+  assert.equal(sim.playerBullets.length, 1, 'no bullets fire while paused');
+  assert.equal(sim.score, pausedScore, 'score freezes while paused');
+
+  // Resume and step -> everything continues from exact paused state
+  sim.phase = 'playing';
+  stepSimulation(sim, emptyInput({ right: true }), 0.02, () => 0.5);
+  assert.ok(sim.player.x > pausedPlayerX, 'player resumes moving from paused position');
+  assert.ok(enemy.y > pausedEnemyY, 'enemy resumes moving from paused position');
+  assert.ok(sim.playerBullets[0].y < pausedBulletY, 'bullet resumes moving from paused position');
+  assert.ok(Math.abs(sim.elapsedSeconds - (pausedElapsed + 0.02)) < 0.0001);
+});
+
+
 
 
 

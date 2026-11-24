@@ -27,10 +27,11 @@ export function PauseModal({
       <div className="w-full max-w-sm rounded-lg border border-[#8b5cf6]/45 bg-[#090c18] p-7 text-center shadow-[0_0_40px_rgba(139,92,246,0.22)]">
         <h2
           id="pause-title"
-          className="text-2xl font-bold tracking-[0.14em] text-[#e6f7ff] uppercase"
-          style={{ textShadow: '0 0 12px rgba(0, 245, 255, 0.4)' }}
+          data-testid="pause-overlay-text"
+          className="text-xl font-bold tracking-[0.12em] text-[#e6f7ff] uppercase sm:text-2xl"
+          style={{ textShadow: '0 0 12px rgba(0, 245, 255, 0.45)' }}
         >
-          Paused
+          PAUSED — Press P to resume
         </h2>
         <div className="mt-3 flex items-center justify-center gap-3 text-xs font-medium tracking-[0.12em] text-[#8ba1bd] uppercase">
           <span>

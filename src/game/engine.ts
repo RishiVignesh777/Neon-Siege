@@ -508,8 +508,10 @@ export function stepSimulation(
     sim.gridOffset = (sim.gridOffset + dt * (sim.phase === 'playing' ? 68 : 28)) % 48;
   }
 
-  // Always tick camera trauma decay and particles even during hitstop/death beat
-  sim.trauma = Math.max(0, sim.trauma - dt * 3.8);
+  // Tick camera trauma decay except while paused
+  if (sim.phase !== 'paused') {
+    sim.trauma = Math.max(0, sim.trauma - dt * 3.8);
+  }
 
   if (sim.phase !== 'playing') {
     if (sim.phase === 'gameover') {
